@@ -1,0 +1,34 @@
+name: 每周自动同步上游
+
+on:
+  schedule:
+    # 周期修改：每周一的北京时间凌晨 4:00 自动运行一次
+    # (UTC 时间 20:00，周日晚上，换算过来就是北京时间周一凌晨 4 点)
+    - cron: '0 20 * * 0'
+  workflow_dispatch: # 保留手动触发按钮，方便你随时测试
+
+jobs:
+  check-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出你的仓库代码
+      - name: 检出本地代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取完整历史，以便比对差异
+
+      # 2. 检查并同步上游仓库
+      - name: 检查上游并同步
+        uses: aormsby/Fork-Sync-Action@v3.4
+        with:
+          target_sync_branch: dev       # 你的分支名（请根据你仓库的实际分支名修改，如 main 或 master）
+          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
+          upstream_sync_branch: dev     # 官方的分支名
+          upstream_sync_repo: jgraph/drawio
+          
+          # 核心配置：开启测试模式，如果是 false 则代表直接执行合并
+          test_mode: false
+
+      # 3. （可选）在日志中打印结果
+      - name: 同步结果检查
+        run: echo "同步检查完成。如果有更新，已自动合并；若无更新，则未执行任何操作。"
