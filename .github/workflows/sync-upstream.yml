@@ -2,33 +2,56 @@ name: 每周自动同步上游
 
 on:
   schedule:
-    # 周期修改：每周一的北京时间凌晨 4:00 自动运行一次
-    # (UTC 时间 20:00，周日晚上，换算过来就是北京时间周一凌晨 4 点)
+    # 每周一的北京时间凌晨 4:00 自动运行一次 (UTC 20:00)
     - cron: '0 20 * * 0'
-  workflow_dispatch: # 保留手动触发按钮，方便你随时测试
+  workflow_dispatch: # 保留手动触发按钮
 
 jobs:
-  check-and-sync:
+  native-git-sync:
     runs-on: ubuntu-latest
     steps:
-      # 1. 检出你的仓库代码
+      # 1. 检出你自己的代码（使用你的 GitHub Token 允许后续推回）
       - name: 检出本地代码
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 获取完整历史，以便比对差异
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # 获取完整历史记录
 
-      # 2. 检查并同步上游仓库
-      - name: 检查上游并同步
-        uses: aormsby/Fork-Sync-Action@v3.4
-        with:
-          target_sync_branch: dev       # 你的分支名（请根据你仓库的实际分支名修改，如 main 或 master）
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-          upstream_sync_branch: dev     # 官方的分支名
-          upstream_sync_repo: jgraph/drawio
+      # 2. 配置 Git 机器人身份（用于合并时生成 Commit 记录）
+      - name: 配置 Git 身份
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # 3. 检查是否有更新，并在有更新时才进行合并与推送
+      - name: 检查上游并自动合并
+        run: |
+          # 添加官方上游仓库
+          git remote add upstream https://github.com/jgraph/drawio.git
           
-          # 核心配置：开启测试模式，如果是 false 则代表直接执行合并
-          test_mode: false
-
-      # 3. （可选）在日志中打印结果
-      - name: 同步结果检查
-        run: echo "同步检查完成。如果有更新，已自动合并；若无更新，则未执行任何操作。"
+          # 获取官方最新分支数据
+          git fetch upstream dev
+          
+          # 【核心逻辑】比对本地分支与官方分支的差异
+          # 如果返回值相同，说明没有新更新
+          LOCAL_HEAD=$(git rev-parse HEAD)
+          UPSTREAM_HEAD=$(git rev-parse upstream/dev)
+          
+          if [ "$LOCAL_HEAD" = "$UPSTREAM_HEAD" ]; then
+            echo "=============================================="
+            echo "🎉 检查完毕：官方仓库本周没有更新，无需操作！"
+            echo "=============================================="
+            exit 0
+          else
+            echo "=============================================="
+            echo "🚀 发现官方有新提交，正在合并更新..."
+            echo "=============================================="
+            
+            # 执行合并（如果是 dev 分支。如果你 Fork 出来的默认分支叫 main 或 master，请把下面这句的 dev 改掉）
+            git merge upstream/dev --allow-unrelated-histories -m "chore: 自动化每周同步官方最新代码"
+            
+            # 推送回你自己的 GitHub 仓库
+            git push origin HEAD
+            
+            echo "✅ 更新已成功同步到你的仓库！"
+          fi
