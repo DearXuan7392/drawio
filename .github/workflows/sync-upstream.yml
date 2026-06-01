@@ -32,14 +32,13 @@ jobs:
           # 获取官方最新分支数据
           git fetch upstream dev
           
-          # 【核心逻辑】比对本地分支与官方分支的差异
-          # 如果返回值相同，说明没有新更新
-          LOCAL_HEAD=$(git rev-parse HEAD)
-          UPSTREAM_HEAD=$(git rev-parse upstream/dev)
+          # 【精准判定】检查你的 HEAD 到 官方 dev 之间有没有落后 Commit
+          # 如果后面有输出，说明官方有新东西；如果为空，说明两边完全同步
+          CHANGES=$(git log HEAD..upstream/dev --oneline)
           
-          if [ "$LOCAL_HEAD" = "$UPSTREAM_HEAD" ]; then
+          if [ -z "$CHANGES" ]; then
             echo "=============================================="
-            echo "🎉 检查完毕：官方仓库本周没有更新，无需操作！"
+            echo "🎉 检查完毕：你的仓库已经是最新，官方无新更新！"
             echo "=============================================="
             exit 0
           else
@@ -47,7 +46,7 @@ jobs:
             echo "🚀 发现官方有新提交，正在合并更新..."
             echo "=============================================="
             
-            # 执行合并（如果是 dev 分支。如果你 Fork 出来的默认分支叫 main 或 master，请把下面这句的 dev 改掉）
+            # 执行合并（如果你的默认分支不是 dev，请将下面这句的 dev 改掉）
             git merge upstream/dev --allow-unrelated-histories -m "chore: 自动化每周同步官方最新代码"
             
             # 推送回你自己的 GitHub 仓库
