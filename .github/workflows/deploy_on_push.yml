@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-and-deploy:
-    # 增加一道安全防线：确保只有你自己的 GitHub 账号运行该工作流时才真正执行部署
+    # 确保只有你自己的 GitHub 账号运行该工作流时才真正执行部署
     if: github.repository_owner == 'DearXuan7392'
     runs-on: ubuntu-latest
     
@@ -19,19 +19,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.11.0' # 选择适合的 Node.js 版本
-      
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Build project
-        run: npm run build
-      
       - name: Deploy to EdgeOne Pages
-        # 将项目名称和令牌全部替换为了通过全局 Secrets 动态读取
+        # 直接把包含静态文件的目录（如 ./src/main/webapp）上传到 EdgeOne
         run: npx edgeone pages deploy ./src/main/webapp -n ${{ secrets.EDGEONE_PROJECT_NAME }} -t ${{ secrets.EDGEONE_API_TOKEN }}
         env:
           EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
