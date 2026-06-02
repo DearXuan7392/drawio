@@ -1,5 +1,12 @@
 {
     "outputDirectory": "./src/main/webapp",
+    "redirects": [
+        {
+            "source": "/",
+            "destination": "/?lang=zh",
+            "statusCode": 302
+        }
+    ],
     "headers": [
         {
             "source": "/*",
