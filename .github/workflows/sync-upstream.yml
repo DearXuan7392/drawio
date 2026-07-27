@@ -26,14 +26,9 @@ jobs:
       # 3. 检查是否有更新，并在有更新时才进行合并与推送
       - name: 检查上游并自动合并
         run: |
-          # 添加官方上游仓库
           git remote add upstream https://github.com/jgraph/drawio.git
-          
-          # 获取官方最新分支数据
           git fetch upstream dev
           
-          # 【精准判定】检查你的 HEAD 到 官方 dev 之间有没有落后 Commit
-          # 如果后面有输出，说明官方有新东西；如果为空，说明两边完全同步
           CHANGES=$(git log HEAD..upstream/dev --oneline)
           
           if [ -z "$CHANGES" ]; then
@@ -46,11 +41,20 @@ jobs:
             echo "🚀 发现官方有新提交，正在合并更新..."
             echo "=============================================="
             
-            # 执行合并（如果你的默认分支不是 dev，请将下面这句的 dev 改掉）
+            # 1. 保存合并前你自己的 HEAD 提交哈希
+            MY_BEFORE_COMMIT=$(git rev-parse HEAD)
+
+            # 2. 正常合并官方代码
             git merge upstream/dev --allow-unrelated-histories -m "chore: 自动化每周同步官方最新代码"
             
-            # 推送回你自己的 GitHub 仓库
+            # 重点：3. 将 .github 文件夹强制重置为你合并前的状态（丢弃上游对 .github 的更改）
+            git checkout $MY_BEFORE_COMMIT -- .github
+            
+            # 4. 如果发生了重置，产生一个新的修正 Commit
+            git commit --amend -m "chore: 自动化每周同步官方最新代码 (排除上游 .github 修改)"
+            
+            # 5. 推送回你自己的 GitHub 仓库
             git push origin HEAD
             
-            echo "✅ 更新已成功同步到你的仓库！"
+            echo "✅ 更新已成功同步到你的仓库（已自动屏蔽上游 .github 文件的更改）！"
           fi
