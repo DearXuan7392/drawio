@@ -2831,6 +2831,7 @@
 			if (config.defaultFonts != null)
 			{
 				Menus.prototype.defaultFonts = config.defaultFonts
+				Editor.addAllowedFontUrls(config.defaultFonts);
 			}
 
 			if (config.presetColors != null)
@@ -3159,6 +3160,7 @@
 			{
 				Menus.prototype.defaultFonts = config.customFonts.
 					concat(Menus.prototype.defaultFonts);
+				Editor.addAllowedFontUrls(config.customFonts);
 			}
 			
 			if (config.customPresetColors != null)
@@ -4042,6 +4044,35 @@
 	};
 
 	/**
+	 * Allows the given font URL to point at the local filesystem. Only for
+	 * URLs that come from the configuration, see Graph.isValidFontUrl.
+	 */
+	Editor.addAllowedFontUrl = function(url)
+	{
+		if (typeof url === 'string' && url.length > 0)
+		{
+			Graph.allowedFontUrls[url] = true;
+		}
+	};
+
+	/**
+	 * Allows the font URLs in a configured font list (customFonts, defaultFonts).
+	 */
+	Editor.addAllowedFontUrls = function(fonts)
+	{
+		if (Array.isArray(fonts))
+		{
+			for (var i = 0; i < fonts.length; i++)
+			{
+				if (fonts[i] != null && typeof fonts[i] === 'object')
+				{
+					Editor.addAllowedFontUrl(fonts[i].fontUrl);
+				}
+			}
+		}
+	};
+
+	/**
 	 * Adds the global fontCss configuration.
 	 */
 	Editor.configureFontCss = function(fontCss)
@@ -4049,6 +4080,22 @@
 		if (fontCss != null)
 		{
 			Editor.prototype.fontCss = fontCss;
+
+			// The configured font CSS is trusted, so its URLs are allowed
+			// even where they point at local files
+			var urls = fontCss.split('url(');
+
+			for (var i = 1; i < urls.length; i++)
+			{
+				var end = urls[i].indexOf(')');
+
+				if (end > 0)
+				{
+					Editor.addAllowedFontUrl(Editor.trimCssUrl(
+						urls[i].substring(0, end)));
+				}
+			}
+
 			var t = document.getElementsByTagName('script')[0];
 			
 			if (t != null && t.parentNode != null)
@@ -4439,17 +4486,20 @@
 	// Marker so the patch can be reapplied without stacking wrappers
 	Editor.safeMathJaxFilterUrl.drawioPatched = true;
 
-	Editor.patchMathJaxUrlFilter = function()
+	Editor.patchMathJaxUrlFilter = function(mathJax)
 	{
-		if (typeof MathJax === 'undefined')
+		mathJax = (mathJax != null) ? mathJax :
+			((typeof MathJax !== 'undefined') ? MathJax : null);
+
+		if (mathJax == null)
 		{
 			return;
 		}
 
 		// Shared method table, used by documents created from here on
-		var methods = (MathJax._ != null && MathJax._.ui != null &&
-			MathJax._.ui.safe != null && MathJax._.ui.safe.SafeMethods != null) ?
-			MathJax._.ui.safe.SafeMethods.SafeMethods : null;
+		var methods = (mathJax._ != null && mathJax._.ui != null &&
+			mathJax._.ui.safe != null && mathJax._.ui.safe.SafeMethods != null) ?
+			mathJax._.ui.safe.SafeMethods.SafeMethods : null;
 
 		if (methods != null && methods.filterURL != null &&
 			!methods.filterURL.drawioPatched)
@@ -4460,7 +4510,7 @@
 		// Safe copies the table into filterMethods in its constructor and
 		// sanitizeNode calls that copy, so a document that already exists
 		// still holds the unpatched function and must be updated separately
-		var doc = (MathJax.startup != null) ? MathJax.startup.document : null;
+		var doc = (mathJax.startup != null) ? mathJax.startup.document : null;
 
 		if (doc != null && doc.safe != null && doc.safe.filterMethods != null &&
 			doc.safe.filterMethods.filterURL != null &&
@@ -4468,6 +4518,110 @@
 		{
 			doc.safe.filterMethods.filterURL = Editor.safeMathJaxFilterUrl;
 		}
+	};
+
+	/**
+	 * Stops the TeX \data macro writing arbitrary data attributes into the
+	 * output. MathJax's ui/safe extension is supposed to do this: it documents
+	 * dataPattern, /^data-mjx-/, as the guard on data attribute names. But the
+	 * filter is only wired up for MathML input, where Safe.mmlAttribute maps any
+	 * data-* name onto filterData through an explicit "data-" prefix check. On
+	 * the TeX path Safe.sanitizeNode looks the whole attribute name up in
+	 * filterAttributes, whose only data key is the literal string "data-", so no
+	 * data-* name can ever match and filterData is dead code. \data{name=value}
+	 * therefore writes any attribute it likes, with only the name checked for
+	 * characters that would break the markup, and those attributes are added
+	 * after Graph.sanitizeHtml has run, so DOMPurify never sees them. A host page
+	 * that reads data-* as instructions then executes the value: Confluence AUI
+	 * renders data-aui-notification-info as HTML. Unfixed upstream as of MathJax
+	 * 4.1.3 and reported as GHSA-3cc2-fjw8-2fjq, so it is patched here rather
+	 * than in math4, like the URL filter above.
+	 *
+	 * The filter is applied inside the \data macro rather than in sanitizeNode
+	 * because MathJax puts its own data attributes on the tree for TeX input,
+	 * data-latex on nearly every node plus a long tail (data-latex-item,
+	 * data-break-align, data-vertical-align, data-frame, data-frame-styles,
+	 * data-array-padding, data-padding, data-width-includes-label,
+	 * data-braketbar, data-cramped, ...) that varies by package. Filtering the
+	 * tree would mean maintaining an allowlist of those names and would silently
+	 * drop MathJax's own output whenever the list fell behind. Scoping the swap
+	 * to the macro means only names \data itself supplies are ever tested, so
+	 * normal math cannot be affected however MathJax changes internally.
+	 */
+	Editor.safeMathJaxDataMacro = function(nodeUtil, macro, parser, name)
+	{
+		var setAttribute = nodeUtil.setAttribute;
+
+		// \data parses its content argument before setting any attribute, so the
+		// swap is only live around this one macro and never sees MathJax's own
+		// writes. TeX parsing is synchronous, so restoring in finally is safe.
+		nodeUtil.setAttribute = function(node, attr, value)
+		{
+			if (typeof attr === 'string' && attr.substring(0, 5) === 'data-' &&
+				!attr.match(Editor.safeMathJaxDataPattern))
+			{
+				return;
+			}
+
+			return setAttribute.apply(this, arguments);
+		};
+
+		try
+		{
+			return macro.apply(this, [parser, name]);
+		}
+		finally
+		{
+			nodeUtil.setAttribute = setAttribute;
+		}
+	};
+
+	// Matches the documented ui/safe default for data attribute names
+	Editor.safeMathJaxDataPattern = /^data-mjx-/;
+
+	Editor.patchMathJaxDataMacro = function(mathJax)
+	{
+		mathJax = (mathJax != null) ? mathJax :
+			((typeof MathJax !== 'undefined') ? MathJax : null);
+
+		var tex = (mathJax != null && mathJax._ != null &&
+			mathJax._.input != null) ? mathJax._.input.tex : null;
+
+		if (tex == null || tex.MapHandler == null || tex.NodeUtil == null)
+		{
+			return;
+		}
+
+		// [tex]/html is preloaded in initMath so the macro exists before the
+		// first typeset. With a caller-supplied config it may be autoloaded
+		// later instead, hence the retry on every render from doMathJaxRender
+		var map = tex.MapHandler.MapHandler.getMap('html_macros');
+		var macro = (map != null && map.lookup != null) ? map.lookup('data') : null;
+
+		if (macro == null || macro._func == null || macro._func.drawioPatched)
+		{
+			return;
+		}
+
+		var nodeUtil = tex.NodeUtil['default'];
+		var original = macro._func;
+
+		var fn = function(parser, name)
+		{
+			return Editor.safeMathJaxDataMacro(nodeUtil, original, parser, name);
+		};
+
+		fn.drawioPatched = true;
+		macro._func = fn;
+	};
+
+	/**
+	 * Hardens the ui/safe extension before the first typeset.
+	 */
+	Editor.patchMathJaxSafeFilters = function(mathJax)
+	{
+		Editor.patchMathJaxUrlFilter(mathJax);
+		Editor.patchMathJaxDataMacro(mathJax);
 	};
 
 	/**
@@ -4502,7 +4656,7 @@
 			
 			Editor.doMathJaxRender = function(container)
 			{
-				Editor.patchMathJaxUrlFilter();
+				Editor.patchMathJaxSafeFilters();
 
 				// Disables automatic line breaking for inline math to
 				// avoid unwanted breaks in narrow label containers
@@ -4566,7 +4720,7 @@
 				{
 					load: [(urlParams['math-output'] == 'html') ?
 						'output/chtml' : 'output/svg', 'input/tex',
-						'input/asciimath', 'ui/safe'],
+						'input/asciimath', 'ui/safe', '[tex]/html'],
 					paths: {
 						'fonts': DRAW_MATH_URL + '/fonts'
 					}
@@ -8550,6 +8704,53 @@
 	Graph.customFontElements = Object.create(null);
 
 	/**
+	 * Font URLs that are allowed to point at the local filesystem. Populated
+	 * from the configuration (customFonts, defaultFonts, fontCss) by
+	 * Editor.addAllowedFontUrl. Null prototype as the keys are URLs.
+	 */
+	Graph.allowedFontUrls = Object.create(null);
+
+	/**
+	 * Returns true if the given font URL may be loaded. Font URLs come from
+	 * untrusted diagram content: a cell style's fontSource, a label's
+	 * data-font-src attribute and the file's extFonts attribute all end up
+	 * here. The desktop app resolves file:// URLs and absolute paths through
+	 * the main process, so an unchecked font URL is a read of an arbitrary
+	 * local file whose bytes are then embedded in the export. Only http(s),
+	 * data: and relative URLs are accepted, plus the local paths named in the
+	 * configuration.
+	 */
+	Graph.isValidFontUrl = function(url)
+	{
+		if (typeof url !== 'string' || url.length == 0)
+		{
+			return false;
+		}
+
+		if (Graph.allowedFontUrls[url])
+		{
+			return true;
+		}
+
+		// The check must run on the string the URL parser will see, not the
+		// raw one: leading and trailing C0 controls and spaces are stripped
+		// and tab, LF and CR are removed anywhere in the URL, so " file:..."
+		// and "file<tab>:..." would otherwise read as relative URLs here and
+		// still be fetched as file: URLs. Spaces inside the URL are kept as
+		// they are legal in a relative path.
+		var test = url.replace(/^[\x00-\x20]+/, '').replace(
+			/[\x00-\x20]+$/, '').replace(/[\t\n\r]/g, '');
+
+		// Anything with a scheme other than http(s) and data: is refused,
+		// which covers file: and Windows drive letters (C:\...), and so is
+		// anything starting with a slash or backslash, which covers absolute
+		// paths (/etc/passwd), UNC paths and protocol-relative URLs. What is
+		// left is relative URLs, which resolve against the app itself.
+		return /^https?:\/\//i.test(test) || /^data:/i.test(test) ||
+			(!/^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(test) && !/^[\\\/]/.test(test));
+	};
+
+	/**
 	 * Returns true if the given font URL references a Google font.
 	 */
 	Graph.isGoogleFontUrl = function(url)
@@ -8642,7 +8843,7 @@
 	 */
 	Graph.addFont = function(name, url, callback, elementLookup)
 	{
-		if (name != null && name.length > 0 && url != null && url.length > 0)
+		if (name != null && name.length > 0 && Graph.isValidFontUrl(url))
 		{
 			elementLookup = (elementLookup != null) ?
 				elementLookup : Graph.customFontElements;
@@ -9418,21 +9619,30 @@
 	Graph.prototype.getCustomFonts = function(lookup)
 	{
 		lookup = (lookup != null) ? lookup : Graph.customFontElements;
-		var fonts = this.extFonts;
+		var fonts = [];
 
-		if (fonts != null)
+		// This is the single funnel for embedExtFonts and getExtFontCss, which
+		// fetch the font and inline it in the export, so the fonts that came
+		// from the file (extFonts) are filtered here too
+		if (this.extFonts != null)
 		{
-			fonts = fonts.slice();
-		}
-		else
-		{
-			fonts = [];
+			for (var i = 0; i < this.extFonts.length; i++)
+			{
+				if (Graph.isValidFontUrl(this.extFonts[i].url))
+				{
+					fonts.push(this.extFonts[i]);
+				}
+			}
 		}
 
 		for (var key in lookup)
 		{
 			var font = lookup[key];
-			fonts.push({name: font.name, url: font.url});
+
+			if (Graph.isValidFontUrl(font.url))
+			{
+				fonts.push({name: font.name, url: font.url});
+			}
 		}
 
 		return fonts;
@@ -11894,6 +12104,7 @@
 	mxStencilRegistry.libraries['eip'] = [SHAPES_PATH + '/mxEip.js', STENCIL_PATH + '/eip.xml'];
 	mxStencilRegistry.libraries['networks'] = [SHAPES_PATH + '/mxNetworks.js', STENCIL_PATH + '/networks.xml'];
 	mxStencilRegistry.libraries['networks2'] = [SHAPES_PATH + '/mxNetworks2.js', STENCIL_PATH + '/networks2.xml'];
+	mxStencilRegistry.libraries['atlassian2'] = [SHAPES_PATH + '/mxAtlassian2.js', STENCIL_PATH + '/atlassian2.xml'];
 	mxStencilRegistry.libraries['aws3d'] = [SHAPES_PATH + '/mxAWS3D.js', STENCIL_PATH + '/aws3d.xml'];
 	mxStencilRegistry.libraries['aws4'] = [SHAPES_PATH + '/mxAWS4.js', STENCIL_PATH + '/aws4.xml'];
 	mxStencilRegistry.libraries['aws4b'] = [SHAPES_PATH + '/mxAWS4.js', STENCIL_PATH + '/aws4.xml'];
