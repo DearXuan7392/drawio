@@ -21,9 +21,17 @@ public interface AbsComm
 
 	String getHeader(String name, Object request);
 
+	String getMethod(Object request);
+
 	String getServerName(Object request);
 
 	String getRemoteAddr(Object request);
+
+	//Path the application is deployed under, "" for the root
+	default String getContextPath(Object request)
+	{
+		return "";
+	}
 
 	void setBody(String body, Object response) throws IOException;
 	

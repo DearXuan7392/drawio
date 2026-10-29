@@ -193,19 +193,30 @@ mxStencilRegistry.allowEval = false;
 	};
 	
 	var oldWindowOpen = window.open;
-	window.open = async function(url)
+	window.open = function(url, target, features)
 	{
 		// Only open a native electron window when url is empty. We use this in our code in several places.
-		if (url == null)
+		// Not async so that the caller gets the Window and not a Promise (eg. mxUtils.show writes to
+		// its document, which threw for the Preview action)
+		if (url == null || url === '' || url === 'about:blank')
 		{
-			return oldWindowOpen(url);
+			// Keyword targets (_self, _top, _parent) would replace the editor page
+			// with about:blank, which will-navigate in the main process does not stop
+			if (target == null || String(target).charAt(0) == '_')
+			{
+				target = '_blank';
+			}
+
+			// Native window.open turns null into the relative URL "null"
+			return oldWindowOpen((url != null) ? url : '', target, features);
 		}
 		else
 		{
-			// Open external will filter urls based on their protocol
-			await requestSync({action: 'openExternal', url: url});
+			// Open external will filter urls based on their protocol. Returns a
+			// Promise (non-null) as before so that callers do not use fallbacks.
+			return requestSync({action: 'openExternal', url: url}).then(function() {});
 		}
-	}
+	};
 
 	var origAppMain = App.main;
 	
@@ -237,6 +248,11 @@ mxStencilRegistry.allowEval = false;
 				{
 					try
 					{
+						if (App.applyRetiredPlugin(plugins[i]))
+						{
+							continue;
+						}
+
 						// Resolved into a local variable as plugins is the live settings
 						// array and rewritten entries would be persisted on the next
 						// settings save, breaking resolution on the following start
@@ -879,6 +895,19 @@ mxStencilRegistry.allowEval = false;
 			this.loadArgs(argsObj)
 		})
 
+		electron.registerMsgListener('updateState', (state) =>
+		{
+			this.setUpdateState(state);
+		});
+
+		electron.request({action: 'getUpdateState'}, (state) =>
+		{
+			this.setUpdateState(state);
+		}, function()
+		{
+			// ignore
+		});
+
 		//We do some async stuff during app loading so we need to know exactly when loading is finished (it is not when onload is finished)
 		electron.sendMessage('app-load-finished', null);
 
@@ -890,6 +919,10 @@ mxStencilRegistry.allowEval = false;
 	{
 		var paths = argsObj.args;
 		var layoutName = argsObj.layout;
+		// Set by the --normalize command-line flag (parsed in the desktop main
+		// process, like layout): repairs the opened model before anything else
+		// touches it - see Graph.normalizeModel.
+		var normalize = argsObj.normalize;
 		// Set by the --mermaid-image command-line flag (parsed in the desktop
 		// main process, like layout): opens .mmd/.mermaid files as a static
 		// image instead of an editable diagram.
@@ -912,6 +945,13 @@ mxStencilRegistry.allowEval = false;
 					file.stat = stat;
 					file.setModified(isModified? true : false);
 					this.fileLoaded(file);
+
+					// --normalize: repair the model first, so a layout reads
+					// edges in the frame of the cell that contains them.
+					if (normalize)
+					{
+						this.editor.graph.normalizeModel();
+					}
 
 					// --layout: run the requested ELK layout once the diagram
 					// is loaded (applies to any opened file, generated or not).
@@ -971,7 +1011,7 @@ mxStencilRegistry.allowEval = false;
 
 	var origFileLoaded = EditorUi.prototype.fileLoaded;
 	
-	EditorUi.prototype.fileLoaded = async function(file)
+	EditorUi.prototype.fileLoaded = function(file)
 	{
 		var oldFile = this.getCurrentFile();
 
@@ -1011,7 +1051,15 @@ mxStencilRegistry.allowEval = false;
 		}
 
 		this.watchFile(file);
-		origFileLoaded.apply(this, arguments);
+		var result = origFileLoaded.apply(this, arguments);
+
+		// Baseline for stale external rewrite detection
+		if (file != null && typeof file.recordOwnState === 'function')
+		{
+			file.recordOwnState();
+		}
+
+		return result;
 	};
 
 	var origSetCurrentFile = EditorUi.prototype.setCurrentFile;
@@ -1035,15 +1083,55 @@ mxStencilRegistry.allowEval = false;
 		var newPath = (file != null && file.fileObject != null &&
 			file == this.getCurrentFile()) ? file.fileObject.path : null;
 		
+		// Path of the latest request so that registrations that resolve
+		// after a newer request can be detected and undone
+		this.requestedWatchPath = newPath;
+
 		if (this.watchedPath != newPath)
 		{
-			this.unwatchPath(this.watchedPath);
+			var oldPath = this.watchedPath;
+			this.watchedPath = null;
+
+			try
+			{
+				await this.unwatchPath(oldPath);
+			}
+			catch (e)
+			{
+				EditorUi.debug('EditorUi.watchFile', [this],
+					'unwatch failed', [oldPath], 'error', [e]);
+			}
 		}
 
 		if (newPath != null)
 		{
-			this.watchedPath = newPath;
-			this.watchPath(newPath);
+			// Only records the path as watched once the registration
+			// succeeded so that a failed watch is retried on the next
+			// call [jgraph/drawio-dev#676]
+			try
+			{
+				await this.watchPath(newPath);
+
+				if (this.requestedWatchPath == newPath)
+				{
+					this.watchedPath = newPath;
+				}
+				else if (this.watchedPath != newPath)
+				{
+					// Superseded by a newer request while pending
+					await this.unwatchPath(newPath);
+				}
+			}
+			catch (e)
+			{
+				if (this.watchedPath == newPath)
+				{
+					this.watchedPath = null;
+				}
+
+				EditorUi.debug('EditorUi.watchFile', [this],
+					'watch failed', [newPath], 'error', [e]);
+			}
 		}
 	};
 	
@@ -1102,7 +1190,7 @@ mxStencilRegistry.allowEval = false;
 
 			var addConflictStatus = mxUtils.bind(this, function(latestFile)
 			{
-				file.inConflictState = true;
+				file.setConflict();
 
 				file.addConflictStatus(null, mxUtils.bind(this, function()
 				{
@@ -1415,14 +1503,6 @@ mxStencilRegistry.allowEval = false;
 					var onMermaid = mxUtils.bind(this, function(diagramXml)
 					{
 						fn(null, diagramXml, null, name, false);
-
-						// Mermaid files carry no stored view, so the default scroll
-						// can land at an arbitrary edge (e.g. the bottom of a tall
-						// flowchart). Apply the standard fit-on-load once the diagram
-						// is in place.
-						var ui = this;
-						window.setTimeout(function() { ui.fitInitialView(); }, 0);
-
 						checkDrafts();
 					});
 
@@ -1561,6 +1641,152 @@ mxStencilRegistry.allowEval = false;
 		}
 	};
 	
+	// Session ring of own content states (load + saves) used to detect a
+	// sync client rewriting the file with an older version of itself
+	// (rollback or delayed echo): silently merging such a state can
+	// duplicate content the user recreated in the meantime, eg. pasted
+	// edges [jgraph/drawio-desktop#2382]
+	// The entries are 32-bit numbers, so the cap costs nothing worth
+	// saving: at 20 a long autosave session evicts the states the guard
+	// needs and the echo window reopens silently
+	LocalFile.prototype.maxOwnStateHashes = 500;
+
+	LocalFile.prototype.recordOwnState = function()
+	{
+		try
+		{
+			var pages = this.getShadowPages();
+
+			if (pages != null && pages.length > 0)
+			{
+				var hash = this.ui.getHashValueForPages(pages);
+
+				if (this.ownStateHashes == null)
+				{
+					this.ownStateHashes = [];
+				}
+
+				// Checked against the WHOLE ring: an edit that toggles
+				// between two states would otherwise burn a slot per
+				// save and evict everything else
+				if (!this.isOwnPastState(hash))
+				{
+					this.ownStateHashes.push(hash);
+
+					if (this.ownStateHashes.length > this.maxOwnStateHashes)
+					{
+						this.ownStateHashes.shift();
+					}
+				}
+			}
+		}
+		catch (e)
+		{
+			// best effort, saving must not fail on detection
+		}
+	};
+
+	LocalFile.prototype.isOwnPastState = function(hash)
+	{
+		return this.ownStateHashes != null &&
+			mxUtils.indexOf(this.ownStateHashes, hash) >= 0;
+	};
+
+	// Asks the user before merging a stale external rewrite instead of
+	// silently adopting it (the conflict status and the save conflict
+	// dialog both end up in synchronizeFile)
+	LocalFile.prototype.synchronizeFile = function(success, error)
+	{
+		this.getLatestVersion(mxUtils.bind(this, function(latestFile)
+		{
+			var stale = false;
+
+			try
+			{
+				var latestHash = this.ui.getHashValueForPages(
+					latestFile.getShadowPages());
+				stale = latestHash != this.ui.getHashValueForPages(
+					this.getShadowPages()) && this.isOwnPastState(latestHash);
+			}
+			catch (e)
+			{
+				// unreadable state falls through to the default merge
+			}
+
+			if (stale)
+			{
+				EditorUi.debug('LocalFile.synchronizeFile', [this],
+					'stale external rewrite detected');
+
+				// Every exit of this dialog must answer the caller. It
+				// was entered from the conflict status or the save
+				// conflict dialog, so a silent dismissal leaves
+				// inConflictState set: further watcher notifications
+				// are suppressed, autosave stops and even the unsaved
+				// status is withheld, while the user keeps editing.
+				// Escape closes the dialog without running either
+				// button, which is exactly that case.
+				var answered = false;
+
+				var answer = mxUtils.bind(this, function(fn)
+				{
+					return mxUtils.bind(this, function()
+					{
+						if (!answered)
+						{
+							answered = true;
+							fn.apply(this, arguments);
+						}
+					});
+				});
+
+				// The dialog closes BEFORE its button callback runs, so
+				// the check is deferred by a tick - otherwise it would
+				// claim the answer on every ordinary click
+				var dismissed = mxUtils.bind(this, function()
+				{
+					window.setTimeout(mxUtils.bind(this, function()
+					{
+						if (!answered)
+						{
+							answered = true;
+
+							// Same semantics as cancelling the conflict
+							// dialog: restores the clickable conflict
+							// status instead of leaving the file in limbo
+							this.handleFileError(null, false);
+						}
+					}), 0);
+				});
+
+				this.ui.confirm(mxResources.get('fileReplacedByOlder'),
+					answer(mxUtils.bind(this, function()
+					{
+						// A save already in flight would drop the
+						// choice silently, so the caller is told
+						this.save(true, success, error, null, true,
+							mxUtils.bind(this, function()
+							{
+								if (error != null)
+								{
+									error({message: mxResources.get('busy')});
+								}
+							}));
+					})), answer(mxUtils.bind(this, function()
+					{
+						DrawioFile.prototype.synchronizeFile.call(
+							this, success, error, latestFile);
+					})), mxResources.get('overwrite'),
+					mxResources.get('synchronize'), null, dismissed);
+			}
+			else
+			{
+				DrawioFile.prototype.synchronizeFile.call(
+					this, success, error, latestFile);
+			}
+		}), error);
+	};
+
 	// Call save as for copy
 	LocalFile.prototype.copyFile = function(success, error)
 	{
@@ -1842,6 +2068,13 @@ mxStencilRegistry.allowEval = false;
 						
 						this.fileSaved(savedData, lastDesc, mxUtils.bind(this, function()
 						{
+							// LocalLibrary extends the pre-wrapper LocalFile, so
+							// libraries have no own-state ring [drawio-desktop#2581]
+							if (typeof this.recordOwnState === 'function')
+							{
+								this.recordOwnState();
+							}
+
 							this.ui.watchFile(this);
 							this.contentChanged();
 							
@@ -1865,7 +2098,7 @@ mxStencilRegistry.allowEval = false;
 						}
 						else if (errMsg == 'conflict')
 						{
-							this.inConflictState = true;
+							this.setConflict();
 							errorWrapper();
 						}
 						else
@@ -2096,7 +2329,7 @@ mxStencilRegistry.allowEval = false;
 			electron.request({
 				action: 'saveDraft',
 				fileObject: this.fileObject,
-				data: (data != null) ? data : this.ui.getFileData()
+				data: (data != null) ? data : this.getDraftData()
 			}, mxUtils.bind(this, function(draftFileName)
 			{
 				this.fileObject.draftFileName = draftFileName;
@@ -2178,7 +2411,8 @@ mxStencilRegistry.allowEval = false;
 	};
 
 	/**
-	 * Loads the given file handle as a local file.
+	 * Saves the current file, or saves it with a new name if forceDialog is true
+	 * or the file has no title, and invokes success after saving.
 	 */
 	App.prototype.saveFile = function(forceDialog, success, error, cancel)
 	{
@@ -2246,7 +2480,9 @@ mxStencilRegistry.allowEval = false;
 	};
 	
 	/**
-	 * Translates this point by the given vector.
+	 * Saves the given images as a library with the given name to the given file,
+	 * or to a new local library if file is null. The library is renamed if the
+	 * name has changed. Invokes fn after saving or on error.
 	 */
 	App.prototype.saveLibrary = function(name, images, file, mode, noSpin, noReload, fn)
 	{
@@ -2331,6 +2567,42 @@ mxStencilRegistry.allowEval = false;
 	App.prototype.checkForUpdates = function()
 	{
 		electron.sendMessage('checkForUpdates');
+	};
+
+	/**
+	 * Restarts with a downloaded update, or opens the release page of a new
+	 * version in installs that do not update themselves (MSI, zip, deb, rpm).
+	 */
+	App.prototype.installUpdate = function()
+	{
+		electron.sendMessage('installUpdate');
+	};
+
+	/**
+	 * Shows a banner once per version for an update that is ready to install
+	 * or, in installs that do not update themselves, for a new version.
+	 */
+	App.prototype.setUpdateState = function(state)
+	{
+		this.updateState = state;
+
+		if (state != null && state.version != null &&
+			(state.status == 'downloaded' || state.status == 'available'))
+		{
+			var ready = state.status == 'downloaded';
+
+			this.showBanner((ready ? 'UpdateReady' : 'UpdateAvailable') + state.version,
+				mxResources.get(ready ? 'updateReady' : 'updateAvailable', [state.version]),
+				mxUtils.bind(this, function()
+			{
+				this.installUpdate();
+			}), true);
+		}
+	};
+
+	App.prototype.toggleAutoUpdate = function()
+	{
+		electron.sendMessage('toggleAutoUpdate');
 	};
 	
 	App.prototype.toggleSpellCheck = function()
@@ -2662,6 +2934,16 @@ mxStencilRegistry.allowEval = false;
 				case 'txt':
 					filters = [
 				          { name: 'Plain Text', extensions: ['txt'] }
+				       ];
+				break;
+				case 'gif':
+					filters = [
+				          { name: 'GIF Images', extensions: ['gif'] }
+				       ];
+				break;
+				case 'mp4':
+					filters = [
+				          { name: 'MP4 Videos', extensions: ['mp4'] }
 				       ];
 				break;
 			};

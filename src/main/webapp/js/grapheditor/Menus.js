@@ -65,8 +65,9 @@ Menus.prototype.init = function()
 		{
 			// Each routing entry also clears libavoidRouting so the choices stay
 			// mutually exclusive (picking any plain routing turns auto-routing off).
-			Format.processMenuIcon(this.edgeStyleChange(menu, '', [mxConstants.STYLE_EDGE, mxConstants.STYLE_CURVED, mxConstants.STYLE_NOEDGESTYLE, 'libavoidRouting'],
-				[null, null, null, null], null, parent, true, Format.straightImage.src)).setAttribute('title', mxResources.get('straight'));
+			// Straight keeps curved (see Format for the Line style control).
+			Format.processMenuIcon(this.edgeStyleChange(menu, '', [mxConstants.STYLE_EDGE, mxConstants.STYLE_NOEDGESTYLE, 'libavoidRouting'],
+				[null, null, null], null, parent, true, Format.straightImage.src)).setAttribute('title', mxResources.get('straight'));
 			Format.processMenuIcon(this.edgeStyleChange(menu, '', [mxConstants.STYLE_EDGE, mxConstants.STYLE_CURVED, mxConstants.STYLE_NOEDGESTYLE, 'libavoidRouting'],
 				['orthogonalEdgeStyle', null, null, null], null, parent, true, Format.orthogonalImage.src)).setAttribute('title', mxResources.get('orthogonal'));
 
@@ -99,27 +100,31 @@ Menus.prototype.init = function()
 
 			Format.processMenuIcon(this.edgeStyleChange(menu, '', [mxConstants.STYLE_EDGE, mxConstants.STYLE_CURVED, mxConstants.STYLE_NOEDGESTYLE, 'libavoidRouting'],
 				['entityRelationEdgeStyle', null, null, null], null, parent, true, Format.entityImage.src)).setAttribute('title', mxResources.get('entityRelation'));
+			this.addSequenceEdgeStyleItem(menu, parent);
 		}
 	})));
 	
 	this.put('edgeShape', new Menu(mxUtils.bind(this, function(menu, parent)
 	{
-		var keys = [mxConstants.STYLE_SHAPE, mxConstants.STYLE_STARTSIZE, mxConstants.STYLE_ENDSIZE, mxConstants.STYLE_DASHED, 'width'];
+		var keys = [mxConstants.STYLE_SHAPE, mxConstants.STYLE_STARTSIZE, mxConstants.STYLE_ENDSIZE, mxConstants.STYLE_DASHED, 'width',
+			'startWidth', 'endWidth', 'defaultFillColor', 'defaultGradientColor'];
 
-		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, [null, null, null, null, null],
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, [null, null, null, null, null, null, null, null, null],
 			null, parent, true, Format.connectionImage.src)).setAttribute('title', mxResources.get('line'));
-		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['link', null, null, null, null],
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['link', null, null, null, null, null, null, null, null],
 			null, parent, true, Format.linkEdgeImage.src)).setAttribute('title', mxResources.get('link'));
-		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['flexArrow', null, null, null, null],
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['flexArrow', null, null, null, null, null, null, null, null],
 			null, parent, true, Format.arrowImage.src)).setAttribute('title', mxResources.get('arrow'));
-		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['arrow', null, null, null, null],
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['arrow', null, null, null, null, null, null, null, null],
 			null, parent, true, Format.simpleArrowImage.src)).setAttribute('title', mxResources.get('simpleArrow'));
-		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['filledEdge', null, null, null, null],
-			null, parent, true, Format.filledEdgeImage.src)).setAttribute('title', 'Filled Edge');
-		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['pipe', null, null, null, null],
-			null, parent, true, Format.pipeEdgeImage.src)).setAttribute('title', 'Pipe');
-		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['wire', null, null, '1', null],
-			null, parent, true, Format.wireEdgeImage.src)).setAttribute('title', 'Wire');
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['taperedArrow', null, null, null, null, null, null, null, null],
+			null, parent, true, Format.taperedArrowImage.src)).setAttribute('title', mxResources.get('taperedArrow'));
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['filledEdge', null, null, null, null, null, null, null, null],
+			null, parent, true, Format.filledEdgeImage.src)).setAttribute('title', mxResources.get('filledEdge'));
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['pipe', null, null, null, null, null, null, null, null],
+			null, parent, true, Format.pipeEdgeImage.src)).setAttribute('title', mxResources.get('pipe'));
+		Format.processMenuIcon(this.edgeStyleChange(menu, '', keys, ['wire', null, null, '1', null, null, null, null, null],
+			null, parent, true, Format.wireEdgeImage.src)).setAttribute('title', mxResources.get('wire'));
 	})));
 
 	this.put('line', new Menu(mxUtils.bind(this, function(menu, parent)
@@ -331,8 +336,23 @@ Menus.prototype.init = function()
 	})));
 	this.put('direction', new Menu(mxUtils.bind(this, function(menu, parent)
 	{
-		menu.addItem(mxResources.get('flipH'), null, function() { graph.toggleCellStyles(mxConstants.STYLE_FLIPH, false); }, parent);
-		menu.addItem(mxResources.get('flipV'), null, function() { graph.toggleCellStyles(mxConstants.STYLE_FLIPV, false); }, parent);
+		// Fires styleChanged in the same update as the flip, which moves
+		// connection points (eg. for libavoid auto-routing)
+		var flip = mxUtils.bind(this, function(key)
+		{
+			graph.getModel().beginUpdate();
+			try
+			{
+				this.toggleStyle(key, false);
+			}
+			finally
+			{
+				graph.getModel().endUpdate();
+			}
+		});
+
+		menu.addItem(mxResources.get('flipH'), null, function() { flip(mxConstants.STYLE_FLIPH); }, parent);
+		menu.addItem(mxResources.get('flipV'), null, function() { flip(mxConstants.STYLE_FLIPV); }, parent);
 		this.addMenuItems(menu, ['-', 'rotation'], parent);
 	})));
 	this.put('align', new Menu(mxUtils.bind(this, function(menu, parent)
@@ -360,162 +380,8 @@ Menus.prototype.init = function()
 		menu.addItem(mxResources.get('horizontal'), null, function() { graph.distributeCells(true, null, true); }, parent);
 		menu.addItem(mxResources.get('vertical'), null, function() { graph.distributeCells(false, null, true); }, parent);
 	})));
-	this.put('layout', new Menu(mxUtils.bind(this, function(menu, parent)
-	{
-		var promptSpacing = mxUtils.bind(this, function(defaultValue, fn)
-		{
-			this.editorUi.prompt(mxResources.get('spacing'), defaultValue, fn);
-		});
-
-		var runTreeLayout = mxUtils.bind(this, function(layout)
-		{
-			this.editorUi.tryAndHandle(mxUtils.bind(this, function()
-			{
-				var tmp = graph.getSelectionCell();
-				var roots = null;
-				
-				if (tmp == null || graph.getModel().getChildCount(tmp) == 0)
-				{
-					if (graph.getModel().getEdgeCount(tmp) == 0)
-					{
-						roots = graph.findTreeRoots(graph.getDefaultParent());
-					}
-				}
-				else
-				{
-					roots = graph.findTreeRoots(tmp);
-				}
-	
-				if (roots != null && roots.length > 0)
-				{
-					tmp = roots[0];
-				}
-				
-				if (tmp != null)
-				{
-					this.editorUi.executeLayout(function()
-					{
-						layout.execute(graph.getDefaultParent(), tmp);
-
-						if (!graph.isSelectionEmpty())
-						{
-							tmp = graph.getModel().getParent(tmp);
-							
-							if (graph.getModel().isVertex(tmp))
-							{
-								graph.updateGroupBounds([tmp], graph.gridSize * 2, true);
-							}
-						}
-					}, true);
-				}
-			}));
-		});
-
-		menu.addItem(mxResources.get('horizontalFlow'), null, mxUtils.bind(this, function()
-		{
-			this.editorUi.tryAndHandle(mxUtils.bind(this, function()
-			{
-				var layout = new mxHierarchicalLayout(graph, mxConstants.DIRECTION_WEST);
-
-				this.editorUi.executeLayout(function()
-				{
-					var selectionCells = graph.getSelectionCells();
-					layout.execute(graph.getDefaultParent(), selectionCells.length == 0 ? null : selectionCells);
-				}, true);
-			}));
-		}), parent);
-		menu.addItem(mxResources.get('verticalFlow'), null, mxUtils.bind(this, function()
-		{
-			this.editorUi.tryAndHandle(mxUtils.bind(this, function()
-			{
-				var layout = new mxHierarchicalLayout(graph, mxConstants.DIRECTION_NORTH);
-				
-				this.editorUi.executeLayout(function()
-				{
-					var selectionCells = graph.getSelectionCells();
-					layout.execute(graph.getDefaultParent(), selectionCells.length == 0 ? null : selectionCells);
-				}, true);
-			}));
-		}), parent);
-		menu.addSeparator(parent);
-		menu.addItem(mxResources.get('horizontalTree') + '...', null, mxUtils.bind(this, function()
-		{
-			var layout = new mxCompactTreeLayout(graph, true);
-			layout.edgeRouting = false;
-			layout.levelDistance = 30;
-			layout.sortEdges = true;
-
-			promptSpacing(layout.levelDistance, mxUtils.bind(this, function(spacing)
-			{
-				if (!isNaN(spacing))
-				{
-					layout.levelDistance = spacing;
-					runTreeLayout(layout);
-				}
-			}));
-		}), parent);
-		menu.addItem(mxResources.get('verticalTree') + '...', null, mxUtils.bind(this, function()
-		{
-			var layout = new mxCompactTreeLayout(graph, false);
-			layout.edgeRouting = false;
-			layout.levelDistance = 30;
-			layout.sortEdges = true;
-
-			promptSpacing(layout.levelDistance, mxUtils.bind(this, function(spacing)
-			{
-				if (!isNaN(spacing))
-				{
-					layout.levelDistance = spacing;
-					runTreeLayout(layout);
-				}
-			}));
-		}), parent);
-		menu.addItem(mxResources.get('radialTree') + '...', null, mxUtils.bind(this, function()
-		{
-			var layout = new mxRadialTreeLayout(graph);
-			layout.levelDistance = 80;
-			layout.autoRadius = true;
-
-			promptSpacing(layout.levelDistance, mxUtils.bind(this, function(spacing)
-			{
-				if (!isNaN(spacing))
-				{
-					layout.levelDistance = spacing;
-					runTreeLayout(layout);
-				}
-			}));
-		}), parent);
-		menu.addSeparator(parent);
-		menu.addItem(mxResources.get('organic') + '...', null, mxUtils.bind(this, function()
-		{
-			var layout = new mxFastOrganicLayout(graph);
-
-			promptSpacing(layout.forceConstant, mxUtils.bind(this, function(newValue)
-			{
-				this.editorUi.tryAndHandle(mxUtils.bind(this, function()
-				{
-					layout.forceConstant = newValue;
-
-					this.editorUi.executeLayout(function()
-					{
-						var tmp = graph.getSelectionCell();
-
-						if (tmp == null || graph.getModel().getChildCount(tmp) == 0)
-						{
-							tmp = graph.getDefaultParent();
-						}
-
-						layout.execute(tmp);
-
-						if (graph.getModel().isVertex(tmp))
-						{
-							graph.updateGroupBounds([tmp], graph.gridSize * 2, true);
-						}
-					}, true);
-				}));
-			}));
-		}), parent);
-	})));
+	// Populated by the application, which provides the layouts
+	this.put('layout', new Menu(function(menu, parent) {}));
 	this.put('navigation', new Menu(mxUtils.bind(this, function(menu, parent)
 	{
 		this.addMenuItems(menu, ['home', '-', 'exitGroup', 'enterGroup', '-', 'expand', 'collapse', '-', 'collapsible'], parent);
@@ -577,21 +443,23 @@ Menus.prototype.init = function()
 	})));
 	this.put('viewZoom', new Menu(mxUtils.bind(this, function(menu, parent)
 	{
-		this.addMenuItems(menu, ['smartFit', '-'], parent);
+		this.addMenuItems(menu, ['resetView', 'fitWindow', '-'], parent);
 		var scales = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
-		
+		var ui = this.editorUi;
+
 		for (var i = 0; i < scales.length; i++)
 		{
 			(function(scale)
 			{
 				menu.addItem((scale * 100) + '%', null, function()
 				{
+					ui.setFitWindowEnabled(false);
 					graph.zoomTo(scale);
 				}, parent);
 			})(scales[i]);
 		}
 
-		this.addMenuItems(menu, ['-', 'fitWindow', 'fitPageWidth', 'fitPage', 'fitTwoPages', '-', 'customZoom'], parent);
+		this.addMenuItems(menu, ['-', 'fitPageWidth', 'fitPage', 'fitTwoPages', '-', 'customZoom'], parent);
 	})));
 	this.put('file', new Menu(mxUtils.bind(this, function(menu, parent)
 	{
@@ -671,7 +539,15 @@ Menus.prototype.addMenu = function(name, popupMenu, parent)
 		menu.execute(popupMenu, parent);
 	}
 
-	// Appends plugin-registered items
+	this.appendPluginMenuItems(name, popupMenu, parent);
+};
+
+/**
+ * Appends the items registered with addPluginMenuItems for the
+ * given menu name to the given popup menu and parent.
+ */
+Menus.prototype.appendPluginMenuItems = function(name, popupMenu, parent)
+{
 	var pluginItems = this.pluginMenuItems[name];
 
 	if (pluginItems != null && pluginItems.length > 0)
@@ -1198,8 +1074,8 @@ Menus.prototype.edgeStyleChange = function(menu, label, keys, values, sprite, pa
 		var graph = this.editorUi.editor.graph;
 		graph.stopEditing(false);
 		
-		graph.getModel().beginUpdate();
-		try
+		// Keeps edge labels where they were if the new route still passes there
+		graph.keepEdgeLabelPositions(graph.getSelectionCells(), mxUtils.bind(this, function()
 		{
 			var cells = graph.getSelectionCells();
 			var edges = [];
@@ -1257,12 +1133,36 @@ Menus.prototype.edgeStyleChange = function(menu, label, keys, values, sprite, pa
 			{
 				postFn(graph, edges);
 			}
-		}
-		finally
-		{
-			graph.getModel().endUpdate();
-		}
+		}));
 	}), parent, sprite));
+};
+
+/**
+ * Adds the sequence message routing to the given edge style menu if an edge
+ * in the selection is connected to a lifeline or an activation bar, or is a
+ * sequence message. The messages keep the y where they are routed now (see
+ * Graph.makeSequenceMessages).
+ */
+Menus.prototype.addSequenceEdgeStyleItem = function(menu, parent)
+{
+	var graph = this.editorUi.editor.graph;
+	var cells = graph.getSelectionCells();
+
+	for (var i = 0; i < cells.length; i++)
+	{
+		if (graph.isSequenceMessageCandidate(cells[i]))
+		{
+			Format.processMenuIcon(this.edgeStyleChange(menu, '', [mxConstants.STYLE_EDGE,
+				mxConstants.STYLE_ELBOW, mxConstants.STYLE_CURVED, mxConstants.STYLE_NOEDGESTYLE,
+				'libavoidRouting'], ['sequenceEdgeStyle', null, null, null, null], null,
+				parent, true, Format.sequenceImage.src, function(graph, edges)
+				{
+					graph.makeSequenceMessages(edges);
+				})).setAttribute('title', mxResources.get('sequenceDiagram'));
+
+			break;
+		}
+	}
 };
 
 /**
@@ -1448,25 +1348,67 @@ Menus.prototype.pickColor = function(key, cmd, defaultValue, defaultColor, defau
 			if (node != null && graph.cellEditor.textarea != null)
 			{
 				var color = graph.getTextColor(node, cmd == 'forecolor');
+				var getColorFn = null;
+
+				// Text without a color of its own has the font color of the
+				// label, which default sets unless all text is selected. The
+				// color window updates both if the text selection changes.
+				if (cmd == 'forecolor')
+				{
+					var labelDefaultColorValue = defaultColorValue;
+
+					getColorFn = function()
+					{
+						var elt = (graph.cellEditor.isContentEditing()) ?
+							graph.getSelectedEditingElement() : null;
+						var current = (elt != null) ? graph.getTextColor(elt, true) : null;
+
+						return (current == 'default') ? graph.getEditingLabelFontColor() : current;
+					};
+
+					defaultColorValue = function()
+					{
+						var labelColor = graph.getEditingLabelFontColor();
+
+						return (labelColor != 'default' && !graph.cellEditor.isAllTextSelected()) ?
+							labelColor : labelDefaultColorValue;
+					};
+
+					if (color == 'default')
+					{
+						color = graph.getEditingLabelFontColor();
+					}
+				}
 
 				this.editorUi.pickColor(color, mxUtils.bind(this, function(color)
 				{
 					if (graph.cellEditor.textarea != null)
 					{
-						Graph.setTextColor(graph.cellEditor.textarea, color, cmd == 'forecolor');
+						// Sets the font color for the label if all text is selected
+						if (cmd == 'forecolor')
+						{
+							graph.setEditingFontColor(color);
+						}
+						else
+						{
+							Graph.setTextColor(graph.cellEditor.textarea, color, false);
+						}
+
 						this.editorUi.fireEvent(new mxEventObject('styleChanged',
 							'keys', [(cmd == 'forecolor') ? mxConstants.STYLE_FONTCOLOR :
 								mxConstants.STYLE_LABEL_BACKGROUNDCOLOR], 'values', [color],
 							'cells', [graph.cellEditor.getEditingCell()]));
 					}
-				}), defaultColor, defaultColorValue, singleColorMode, title);
+				}), defaultColor, defaultColorValue, singleColorMode, title, getColorFn);
 			}
 		}
 		else
 		{
 			var getColorFn = function()
 			{
-				var style = graph.getCellStyle(graph.getSelectionCell(), false);
+				var cell = graph.getSelectionCell();
+				var style = graph.resolveInheritedLabelStyles(cell,
+					graph.getCellStyle(cell, false));
 
 				return (style != null) ? (style[key] || mxConstants.NONE) : mxConstants.NONE;
 			};
@@ -1671,13 +1613,41 @@ Menus.prototype.isShowStyleItems = function()
 };
 
 /**
+ * Returns the names of the actions for the newEdgeStyle of the selection:
+ * setAsDefaultForNewConnections for a single edge with an editable source
+ * and clearDefaultForNewConnections for a single vertex with a newEdgeStyle.
+ */
+Menus.prototype.getNewEdgeStyleActions = function()
+{
+	var graph = this.editorUi.editor.graph;
+	var cell = graph.getSelectionCell();
+	var result = [];
+
+	if (graph.isEnabled() && graph.getSelectionCount() == 1)
+	{
+		if (graph.getNewEdgeStyleSource(cell) != null)
+		{
+			result.push('setAsDefaultForNewConnections');
+		}
+		else if (graph.model.isVertex(cell) && graph.isCellEditable(cell) &&
+			graph.getCurrentCellStyle(cell)['newEdgeStyle'] != null)
+		{
+			result.push('clearDefaultForNewConnections');
+		}
+	}
+
+	return result;
+};
+
+/**
  * Creates the keyboard event handler for the current graph and history.
  */
 Menus.prototype.addPopupMenuStyleItems = function(menu, cell, evt)
 {
 	if (this.editorUi.editor.graph.getSelectionCount() == 1)
 	{
-		this.addMenuItems(menu, ['-', 'setAsDefaultStyle'], null, evt);
+		this.addMenuItems(menu, ['-', 'setAsDefaultStyle'].concat(
+			this.getNewEdgeStyleActions()), null, evt);
 	}
 	else if (this.editorUi.editor.graph.isSelectionEmpty())
 	{
@@ -1783,7 +1753,11 @@ Menus.prototype.addPopupMenuCellItems = function(menu, cell, evt)
 						}
 					}
 					
-					this.addMenuItems(menu, [(isWaypoint) ? 'removeWaypoint' : 'addWaypoint'], null, evt);
+					// Waypoints are hidden while ignored for a collapsed terminal
+					if (isWaypoint || !graph.view.isCollapsedPointsIgnored(cell, graph.getCurrentCellStyle(cell)))
+					{
+						this.addMenuItems(menu, [(isWaypoint) ? 'removeWaypoint' : 'addWaypoint'], null, evt);
+					}
 				}
 			}
 		}
@@ -1832,12 +1806,37 @@ Menus.prototype.addPopupMenuCellEditItems = function(menu, cell, evt, parent)
 
 	if (graph.getModel().isVertex(cell) && graph.isCellConnectable(cell))
 	{
+		this.addConnectionPointMenuItem(menu, cell, parent, evt);
 		this.addMenuItem(menu, 'editConnectionPoints', parent, evt);
 	}
 
 	if (state != null && mxUtils.getValue(state.style, mxConstants.STYLE_SHAPE) === 'mxgraph.basic.polygon')
 	{
 		this.addMenuItem(menu, 'editPolygon', parent, evt);
+	}
+};
+
+/**
+ * Adds addConnectionPoint for the given cell if the location of the context
+ * menu maps to a connection point of the cell (see
+ * Graph.getConnectionConstraintForPoint). Must only be used in menus that
+ * are opened by the popup menu handler.
+ */
+Menus.prototype.addConnectionPointMenuItem = function(menu, cell, parent, evt)
+{
+	var graph = this.editorUi.editor.graph;
+
+	if (cell != null && graph.getModel().isVertex(cell) &&
+		graph.isCellConnectable(cell) && !graph.isCellLocked(cell))
+	{
+		// Adds a connection point at the location of the context menu
+		var pt = graph.popupMenuHandler.getTriggerPoint();
+
+		if (graph.getConnectionConstraintForPoint(
+			graph.view.getState(cell), pt.x, pt.y) != null)
+		{
+			this.addMenuItem(menu, 'addConnectionPoint', parent, evt);
+		}
 	}
 };
 
@@ -1865,14 +1864,15 @@ Menus.prototype.createMenubar = function(container)
 		
 		for (var i = 0; i < menus.length; i++)
 		{
-			(mxUtils.bind(this, function(menu)
+			(mxUtils.bind(this, function(menu, name)
 			{
-				var elt = menubar.addMenu(mxResources.get(menus[i]), mxUtils.bind(this, function()
+				var elt = menubar.addMenu(mxResources.get(name), mxUtils.bind(this, function(popupMenu, parent)
 				{
 					try
 					{
 						// Allows extensions of menu.funct
 						menu.funct.apply(this, arguments);
+						this.appendPluginMenuItems(name, popupMenu, parent);
 					}
 					catch (e)
 					{
@@ -1881,7 +1881,7 @@ Menus.prototype.createMenubar = function(container)
 				}));
 				
 				this.menuCreated(menu, elt);
-			}))(this.get(menus[i]));
+			}))(this.get(menus[i]), menus[i]);
 		}
 		
 		if (Editor.currentTheme == 'kennedy' ||

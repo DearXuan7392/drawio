@@ -124,7 +124,7 @@ var ColorPicker = function()
 	colorPanel.appendChild(cross);
 	div.appendChild(colorPanel);
 
-	sliderBox = document.createElement('div');
+	var sliderBox = document.createElement('div');
 	sliderBox.style.position = 'absolute';
 	sliderBox.style.cursor = 'pointer';
 	sliderBox.style.width = '38px';
@@ -278,7 +278,7 @@ var ColorPicker = function()
 		quiet = (quiet != null) ? quiet : false;
 
 		if (color == null || color == '' ||
-			mxUtils.isVarColor(color) ||
+			mxUtils.isVarOrSystemColor(color) ||
 			color == mxConstants.NONE)
 		{
 			color = '#ffffff';
@@ -346,7 +346,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 	if (color != 'default' &&
 		color != 'transparent' &&
 		color != mxConstants.NONE &&
-		!mxUtils.isVarColor(color) &&
+		!mxUtils.isVarOrSystemColor(color) &&
 		!mxUtils.isHexColor(color) &&
 		!mxUtils.isRgbColor(color) &&
 		!mxUtils.isLightDarkColor(color))
@@ -579,7 +579,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 				cssDefaultColor.light;
 		}
 		else if (input.value == '' || input.value == mxConstants.NONE ||
-			mxUtils.isVarColor(input.value))
+			mxUtils.isVarOrSystemColor(input.value))
 		{
 			input.style.background = 'transparent';
 		}
@@ -704,7 +704,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 		else
 		{
 			if (elt.value != mxConstants.NONE &&
-				!mxUtils.isVarColor(elt.value))
+				!mxUtils.isVarOrSystemColor(elt.value))
 			{
 				elt.value = validateColor(elt.value);
 				picker.fromString('#' + elt.value);
@@ -725,7 +725,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 				{
 					darkInput.value = mxConstants.NONE;
 				}
-				else if (mxUtils.isVarColor(input.value))
+				else if (mxUtils.isVarOrSystemColor(input.value))
 				{
 					darkInput.value = input.value;
 				}
@@ -765,8 +765,8 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 
 		// Blocks any non-alphabetic chars in colors
 		if ((useDefault && cssDefaultColor != null) ||
-			((/(^#?[a-zA-Z0-9]*$)/.test(color) || mxUtils.isVarColor(color)) &&
-			(/(^#?[a-zA-Z0-9]*$)/.test(dark) || mxUtils.isVarColor(dark))))
+			((/(^#?[a-zA-Z0-9]*$)/.test(color) || mxUtils.isVarOrSystemColor(color)) &&
+			(/(^#?[a-zA-Z0-9]*$)/.test(dark) || mxUtils.isVarOrSystemColor(dark))))
 		{
 			if (useDefault)
 			{
@@ -785,14 +785,14 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 				}
 
 				if (color != mxConstants.NONE &&
-					!mxUtils.isVarColor(color) &&
+					!mxUtils.isVarOrSystemColor(color) &&
 					color.charAt(0) != '#')
 				{
 					color = '#' + validateColor(color);
 				}
 
 				if (dark != mxConstants.NONE &&
-					!mxUtils.isVarColor(dark) &&
+					!mxUtils.isVarOrSystemColor(dark) &&
 					dark.charAt(0) != '#')
 				{
 					dark = '#' + validateColor(dark);
@@ -828,8 +828,8 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 		var dark = darkInput.value;
 
 		if (!((useDefault && cssDefaultColor != null) ||
-			((/(^#?[a-zA-Z0-9]*$)/.test(color) || mxUtils.isVarColor(color)) &&
-			(/(^#?[a-zA-Z0-9]*$)/.test(dark) || mxUtils.isVarColor(dark)))))
+			((/(^#?[a-zA-Z0-9]*$)/.test(color) || mxUtils.isVarOrSystemColor(color)) &&
+			(/(^#?[a-zA-Z0-9]*$)/.test(dark) || mxUtils.isVarOrSystemColor(dark)))))
 		{
 			return;
 		}
@@ -840,14 +840,14 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 			if (dark == '') dark = mxConstants.NONE;
 
 			if (color != mxConstants.NONE &&
-				!mxUtils.isVarColor(color) &&
+				!mxUtils.isVarOrSystemColor(color) &&
 				color.charAt(0) != '#')
 			{
 				color = '#' + validateColor(color);
 			}
 
 			if (dark != mxConstants.NONE &&
-				!mxUtils.isVarColor(dark) &&
+				!mxUtils.isVarOrSystemColor(dark) &&
 				dark.charAt(0) != '#')
 			{
 				dark = '#' + validateColor(dark);
@@ -1336,6 +1336,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 		}
 	});
 
+	dropperBtn.setAttribute('title', mxResources.get('colorPicker', null, 'Color Picker'));
 	dropperBtn.style.cursor = 'pointer';
 
 	var dropper = document.createElement('img');
@@ -1481,7 +1482,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 			}
 			else
 			{
-				if (mxUtils.isVarColor(cssColor.light))
+				if (mxUtils.isVarOrSystemColor(cssColor.light))
 				{
 					input.value = cssColor.light;
 				}
@@ -1507,7 +1508,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 			}
 			else
 			{
-				if (mxUtils.isVarColor(cssColor.dark))
+				if (mxUtils.isVarOrSystemColor(cssColor.dark))
 				{
 					darkInput.value = cssColor.dark;
 				}
@@ -1697,7 +1698,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 			if (newColor != 'default' &&
 				newColor != 'transparent' &&
 				newColor != mxConstants.NONE &&
-				!mxUtils.isVarColor(newColor) &&
+				!mxUtils.isVarOrSystemColor(newColor) &&
 				!mxUtils.isHexColor(newColor) &&
 				!mxUtils.isRgbColor(newColor) &&
 				!mxUtils.isLightDarkColor(newColor))
@@ -1731,7 +1732,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 				}
 				else
 				{
-					if (mxUtils.isVarColor(cssColor.light))
+					if (mxUtils.isVarOrSystemColor(cssColor.light))
 					{
 						input.value = cssColor.light;
 					}
@@ -1757,7 +1758,7 @@ var ColorDialog = function(editorUi, color, apply, cancelFn, defaultColor, defau
 				}
 				else
 				{
-					if (mxUtils.isVarColor(cssColor.dark))
+					if (mxUtils.isVarOrSystemColor(cssColor.dark))
 					{
 						darkInput.value = cssColor.dark;
 					}
@@ -1949,6 +1950,9 @@ var ColorWindow = function(editorUi, x, y, w)
 	this.currentAllowInherit = null;
 	this.applying = false;
 
+	// Text selection of the in-place editor that colors are applied to
+	this.selState = null;
+
 	var refreshColor = mxUtils.bind(this, function()
 	{
 		if (this.window.isVisible() && this.getColorFn != null &&
@@ -1961,7 +1965,7 @@ var ColorWindow = function(editorUi, x, y, w)
 				// Passes allowInherit so an external change (eg. collaborator
 				// edit) does not drop the Inherit button while the window is open
 				this.colorDialog.setColor(color, this.currentDefaultColor,
-					this.currentDefaultColorValue, this.currentSingleColorMode,
+					this.getDefaultColorValue(), this.currentSingleColorMode,
 					this.currentAllowInherit);
 			}
 		}
@@ -1971,11 +1975,98 @@ var ColorWindow = function(editorUi, x, y, w)
 	graph.getModel().addListener(mxEvent.CHANGE, refreshColor);
 	editorUi.addListener('styleChanged', refreshColor);
 
-	editorUi.installResizeHandler(this, true);
+	// Updates a default color that depends on the text selection of the
+	// in-place editor (see Graph.setEditingFontColor) if the selection is
+	// changed there, eg. from a part of the text to all text. Single color
+	// mode is skipped as it focuses the input of the dialog.
+	var selectionChangeHandler = mxUtils.bind(this, function()
+	{
+		if (typeof this.currentDefaultColorValue === 'function' &&
+			!this.currentSingleColorMode && graph.cellEditor.textarea != null &&
+			document.activeElement == graph.cellEditor.textarea)
+		{
+			refreshColor();
+		}
+	});
+
+	mxEvent.addListener(document, 'selectionchange', selectionChangeHandler);
+
+	// Saves the text selection if the in-place editor has the focus when the
+	// window is used, so that colors apply to text selected after opening it
+	mxEvent.addGestureListeners(this.window.div, mxUtils.bind(this, function()
+	{
+		if (document.activeElement == graph.cellEditor.textarea)
+		{
+			this.selState = graph.cellEditor.saveSelection();
+		}
+	}));
+
+	// The color dialog focuses its hex input when it opens and after each
+	// color change, and the key handler ignores keys from outside the diagram,
+	// so undo and redo shortcuts are routed here. Native undo is kept while a
+	// value is being typed, and while a label is being edited, where
+	// EditorUi.undo expects the focus in the in-place editor.
+	var typing = false;
+
+	mxEvent.addListener(this.window.div, 'focusin', function()
+	{
+		typing = false;
+	});
+
+	mxEvent.addListener(this.window.div, 'input', function(evt)
+	{
+		var source = mxEvent.getSource(evt);
+		typing = source.nodeName == 'INPUT' && source.type == 'text';
+	});
+
+	mxEvent.addListener(this.window.div, 'keydown', function(evt)
+	{
+		var keyHandler = editorUi.keyHandler;
+
+		// Same shortcuts as in EditorUi.createKeyHandler: Ctrl+Z for undo,
+		// Ctrl+Shift+Z and Ctrl+Y for redo (Cmd on macOS)
+		if (!typing && !graph.isEditing() && keyHandler != null &&
+			keyHandler.isEnabled() && keyHandler.isControlDown(evt) &&
+			!mxEvent.isAltDown(evt) && (evt.keyCode == 90 ||
+			(evt.keyCode == 89 && !mxEvent.isShiftDown(evt))) &&
+			(editorUi.dialogs == null || editorUi.dialogs.length == 0))
+		{
+			var action = editorUi.actions.get((evt.keyCode == 90 &&
+				!mxEvent.isShiftDown(evt)) ? 'undo' : 'redo');
+
+			if (action.isEnabled())
+			{
+				action.funct();
+			}
+
+			mxEvent.consume(evt);
+		}
+	});
+
+	// Removes the listeners outside of the window in destroy, as they keep
+	// the editor alive (the window removes the listeners of its elements)
+	editorUi.installResizeHandler(this, true, function()
+	{
+		graph.getSelectionModel().removeListener(refreshColor);
+		graph.getModel().removeListener(refreshColor);
+		editorUi.removeListener(refreshColor);
+		mxEvent.removeListener(document, 'selectionchange', selectionChangeHandler);
+	});
 };
 
 /**
- * Updates the color window state for a new color property.
+ * Returns the default color value, which may be given as a function.
+ */
+ColorWindow.prototype.getDefaultColorValue = function()
+{
+	return (typeof this.currentDefaultColorValue === 'function') ?
+		this.currentDefaultColorValue() : this.currentDefaultColorValue;
+};
+
+/**
+ * Updates the color window state for a new color property. The default
+ * color value may be a function that returns it, eg. if it depends on the
+ * text selection.
  */
 ColorWindow.prototype.update = function(color, applyFn, title,
 	defaultColor, defaultColorValue, singleColorMode, getColorFn, allowInherit)
@@ -1988,7 +2079,8 @@ ColorWindow.prototype.update = function(color, applyFn, title,
 
 	this.window.setTitle(title);
 	this.colorDialog.setApplyFn(applyFn);
-	this.colorDialog.setColor(color, defaultColor, defaultColorValue, singleColorMode, allowInherit);
+	this.colorDialog.setColor(color, defaultColor, this.getDefaultColorValue(),
+		singleColorMode, allowInherit);
 	this.window.setVisible(true);
 	this.fitHeight();
 	this.colorDialog.init();
@@ -2369,7 +2461,6 @@ var MarkupDialog = function(editorUi, title, value, fn, cancelFn, helpLink)
 
 	var hd = document.createElement('h3');
 	mxUtils.write(hd, title);
-	hd.style.cssText = 'width:100%;text-align:center;margin:0 0 8px 0;flex-shrink:0';
 	div.appendChild(hd);
 
 	// Formatting toolbar
@@ -2407,14 +2498,17 @@ var MarkupDialog = function(editorUi, title, value, fn, cancelFn, helpLink)
 
 	var sourceVisible = false;
 
+	// Style elements apply to the whole document while editing
 	function sourceToWysiwyg()
 	{
-		wysiwyg.innerHTML = Graph.sanitizeHtml(textarea.value);
+		wysiwyg.innerHTML = Graph.disableHtmlStyles(Graph.sanitizeHtml(
+			textarea.value), Graph.backupCssAttribute);
 	};
 
 	function wysiwygToSource()
 	{
-		return Graph.sanitizeHtml(wysiwyg.innerHTML);
+		return Graph.sanitizeHtml(Graph.getHtmlWithStyleElements(
+			wysiwyg, Graph.backupCssAttribute));
 	};
 
 	function getValue()
@@ -2879,21 +2973,25 @@ var EditDiagramDialog = function(editorUi)
 			evt.stopPropagation();
 			evt.preventDefault();
 
-			if (evt.dataTransfer.files.length > 0)
+			// Drop events created by scripts may have no dataTransfer and no data
+			if (evt.dataTransfer != null)
 			{
-				var file = evt.dataTransfer.files[0];
-				var reader = new FileReader();
-
-				reader.onload = function(e)
+				if (evt.dataTransfer.files.length > 0)
 				{
-					textarea.value = e.target.result;
-				};
+					var file = evt.dataTransfer.files[0];
+					var reader = new FileReader();
 
-				reader.readAsText(file);
-			}
-			else
-			{
-				textarea.value = editorUi.extractGraphModelFromEvent(evt);
+					reader.onload = function(e)
+					{
+						textarea.value = e.target.result;
+					};
+
+					reader.readAsText(file);
+				}
+				else
+				{
+					textarea.value = editorUi.extractGraphModelFromEvent(evt);
+				}
 			}
 		};
 
@@ -2928,6 +3026,7 @@ var EditDiagramDialog = function(editorUi)
 		editorUi.hideDialog();
 	});
 
+	cancelBtn.setAttribute('title', 'Escape');
 	cancelBtn.className = 'geBtn';
 
 	if (editorUi.editor.cancelFirst)
@@ -2948,10 +3047,15 @@ var EditDiagramDialog = function(editorUi)
 	mxUtils.write(placeholderOption, mxResources.get('select') + '...');
 	select.appendChild(placeholderOption);
 
-	var copyOption = document.createElement('option');
-	copyOption.setAttribute('value', 'copy');
-	mxUtils.write(copyOption, mxResources.get('copyDiagramToClipboard'));
-	select.appendChild(copyOption);
+	// The clipboard API is missing in insecure contexts, eg. embeds in pages
+	// served over http
+	if (navigator.clipboard != null && navigator.clipboard.writeText != null)
+	{
+		var copyOption = document.createElement('option');
+		copyOption.setAttribute('value', 'copy');
+		mxUtils.write(copyOption, mxResources.get('copyDiagramToClipboard'));
+		select.appendChild(copyOption);
+	}
 
 	var newOption = document.createElement('option');
 	newOption.setAttribute('value', 'new');
@@ -3051,15 +3155,12 @@ var EditDiagramDialog = function(editorUi)
 				}
 				else
 				{
-					if (node.nodeName == 'mxfile')
-					{
-						editorUi.editor.setGraphXml(node);
-					}
-					else
-					{
-						editorUi.updateDiagramData(snapshot, node);
-					}
-
+					// Whole files and other wrappers are unwrapped in
+					// updateDiagramData: replacing the model directly
+					// leaves the page pointing at its old root, and
+					// realtime files flush and save the pages, so the
+					// change is lost there (jgraph/drawio#5795)
+					editorUi.updateDiagramData(snapshot, node);
 					editorUi.hideDialog();
 				}
 			}
@@ -3073,8 +3174,17 @@ var EditDiagramDialog = function(editorUi)
 				editorUi.handleError(error);
 			}
 		});
+		applyBtn.setAttribute('title', 'Ctrl+Enter');
 		applyBtn.className = 'geBtn gePrimaryBtn';
 		buttons.appendChild(applyBtn);
+
+		mxEvent.addListener(textarea, 'keydown', function(e)
+		{
+			if (e.keyCode == 13 && mxEvent.isControlDown(e))
+			{
+				applyBtn.click();
+			}
+		});
 	}
 
 	if (!editorUi.editor.cancelFirst)
@@ -3627,7 +3737,7 @@ ExportDialog.saveLocalFile = function(editorUi, data, filename, format)
 	else
 	{
 		mxUtils.alert(mxResources.get('drawingTooLarge'));
-		mxUtils.popup(xml);
+		mxUtils.popup(data);
 	}
 };
 
@@ -3698,6 +3808,17 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 
 	// Properties container for dynamic rows
 	var propertiesContainer = document.createElement('div');
+	var propsSection = null;
+
+	// Hides the properties section while it has no rows so that
+	// no empty section box is shown for cells without properties
+	var updatePropsSection = function()
+	{
+		if (propsSection != null)
+		{
+			propsSection.style.display = (propertiesContainer.firstChild != null) ? '' : 'none';
+		}
+	};
 
 	var addRemoveButton = function(row, name)
 	{
@@ -3708,7 +3829,6 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 
 		removeAttr.className = 'geButton';
 		removeAttr.setAttribute('title', mxResources.get('delete'));
-		removeAttr.style.marginLeft = '8px';
 		removeAttr.style.cursor = 'pointer';
 		removeAttr.style.flexShrink = '0';
 		removeAttr.appendChild(img);
@@ -3724,6 +3844,7 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 						texts[j] = null;
 						rows[j] = null;
 						row.parentNode.removeChild(row);
+						updatePropsSection();
 
 						break;
 					}
@@ -3869,10 +3990,9 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 		idRow.appendChild(idLabel);
 
 		var idText = document.createElement('span');
-		idText.style.fontSize = '12px';
 		idText.style.cursor = 'pointer';
-		idText.style.opacity = '0.6';
-		idText.setAttribute('title', mxResources.get('doubleClickToEdit'));
+		idText.setAttribute('title', mxResources.get('doubleClickToEdit',
+			null, 'Double-click to edit'));
 		mxUtils.write(idText, id);
 		idRow.appendChild(idText);
 
@@ -3891,16 +4011,9 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 						{
 							if (ui.getPageById(value) == null)
 							{
-								var index = ui.getPageIndex(page);
-
-								if (index >= 0)
-								{
-									ui.removePage(page);
-									page.node.setAttribute('id', value);
-									id = value;
-									idText.innerHTML = mxUtils.htmlEntities(value);
-									ui.insertPage(page, index);
-								}
+								ui.setPageId(page, value);
+								id = value;
+								idText.innerHTML = mxUtils.htmlEntities(value);
 							}
 							else
 							{
@@ -3913,11 +4026,10 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 					{
 						if (graph.getModel().getCell(value) == null)
 						{
-							graph.getModel().cellRemoved(cell);
-							cell.setId(value);
+							graph.getModel().execute(new ChangeCellId(
+								graph.getModel(), cell, value));
 							id = value;
 							idText.innerHTML = mxUtils.htmlEntities(value);
-							graph.getModel().cellAdded(cell);
 						}
 						else
 						{
@@ -3941,13 +4053,14 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 	}
 
 	// --- Properties section ---
-	var propsSection = document.createElement('div');
+	propsSection = document.createElement('div');
 	propsSection.className = 'geDialogSection';
 	propsSection.style.flex = '1';
 	propsSection.style.minHeight = '0';
 	propsSection.style.overflowY = 'auto';
 	propsSection.appendChild(propertiesContainer);
 	container.appendChild(propsSection);
+	updatePropsSection();
 
 	// --- Add Property section ---
 	var addSection = document.createElement('div');
@@ -3965,9 +4078,8 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 	{
 		var name = nameInput.value;
 
-		// Avoid ':' in attribute names which seems to be valid in Chrome
-		if (name.length > 0 && name != 'label' && name != 'id' &&
-			name != 'placeholders' && name.indexOf(':') < 0 &&
+		// Avoids reserved names and ':' in attribute names which seems to be valid in Chrome
+		if (name.length > 0 && !Graph.isReservedDataName(name) &&
 			EditDataDialog.isValidAttributeName(name))
 		{
 			try
@@ -3994,6 +4106,7 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 
 					var newIndex = names.length;
 					addTextArea(newIndex, name, '');
+					updatePropsSection();
 					texts[newIndex].focus();
 					propsSection.scrollTop = propsSection.scrollHeight;
 				}
@@ -4003,20 +4116,26 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 			}
 			catch (e)
 			{
-				mxUtils.alert(e);
+				ui.handleError(e);
 			}
 		}
 		else
 		{
-			mxUtils.alert(mxResources.get('invalidName'));
+			// Lists the reserved names if a reserved name was entered
+			ui.showError(mxResources.get('error'), mxResources.get('invalidName') +
+				((Graph.isReservedDataName(name)) ? ' (' +
+				Graph.reservedDataNames.join(', ') + ', :)' : ''),
+				mxResources.get('ok'));
 		}
 	});
 
 	addBtn.setAttribute('title', mxResources.get('addProperty'));
 	addBtn.setAttribute('disabled', 'disabled');
 	addBtn.style.flexShrink = '0';
-	addBtn.style.marginLeft = '8px';
 	addBtn.className = 'geBtn';
+
+	// The row's column-gap owns the spacing
+	addBtn.style.marginLeft = '0';
 	addRow.appendChild(addBtn);
 
 	addSection.appendChild(addRow);
@@ -4079,22 +4198,12 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 			input.indeterminate = true;
 		}
 
+		// Applied to the cells on apply only if toggled, as the values
+		// are the values of the cells in the model
 		mxEvent.addListener(input, 'click', function()
 		{
-			if (multi)
-			{
-				// Applied to all cells on apply only if toggled
-				placeholdersTouched = true;
-				input.indeterminate = false;
-			}
-			else if (value.getAttribute('placeholders') == '1')
-			{
-				value.removeAttribute('placeholders');
-			}
-			else
-			{
-				value.setAttribute('placeholders', '1');
-			}
+			placeholdersTouched = true;
+			input.indeterminate = false;
 		});
 
 		checkRow.appendChild(input);
@@ -4123,16 +4232,7 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 
 	var exportBtn = mxUtils.button(mxResources.get('export'), mxUtils.bind(this, function(evt)
 	{
-		var result = graph.getDataForCells(cells, true);
-
-		var dlg = new EmbedDialog(ui, JSON.stringify(result, null, 2), null, null, function()
-		{
-			console.log(result);
-			ui.alert('Written to Console (Dev Tools)');
-		}, mxResources.get('export'), null, 'Console', 'data.json');
-		ui.showDialog(dlg.container, 450, 270, true, true, null,
-			false, null, new mxRectangle(0, 0, 400, 250));
-		dlg.init();
+		ui.showDataExport(JSON.stringify(graph.getDataForCells(cells, true), null, 2), 'data.json');
 	}));
 
 	exportBtn.setAttribute('title', mxResources.get('export'));
@@ -4154,7 +4254,7 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 
 					// Applies the placeholders checkbox to all cells
 					// only if it was toggled by the user
-					if (multi && placeholdersTouched)
+					if (placeholdersTouched)
 					{
 						if (input.checked)
 						{
@@ -4199,7 +4299,7 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 		}
 		catch (e)
 		{
-			mxUtils.alert(e);
+			ui.handleError(e);
 		}
 	});
 
@@ -4209,6 +4309,9 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 	var btnRow = document.createElement('div');
 	btnRow.style.textAlign = 'right';
 	btnRow.style.paddingTop = '16px';
+
+	// Keeps the buttons at the bottom if the properties section is hidden
+	btnRow.style.marginTop = 'auto';
 
 	if (ui.editor.cancelFirst)
 	{
@@ -4250,19 +4353,16 @@ var EditDataDialog = function(ui, cell, optionalGraph)
 };
 
 /**
- * Characters allowed as the first character of an XML attribute name
- * (NameStartChar in the XML Name production, restricted to the BMP).
- * See https://www.w3.org/TR/xml/#NT-Name.
+ * Characters allowed as the first character of a data property name. See
+ * Graph.xmlNameStartChars: letters that every browser's XML parser accepts,
+ * without colons, which would be undeclared namespace prefixes.
  */
-EditDataDialog.nameStartChar = ':A-Z_a-z' +
-	'\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF' +
-	'\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD';
+EditDataDialog.nameStartChar = Graph.xmlNameStartChars;
 
 /**
- * Characters allowed in an XML attribute name after the first character
- * (NameChar in the XML Name production, restricted to the BMP).
+ * Characters allowed in a data property name after the first character.
  */
-EditDataDialog.nameChar = '-.0-9\\u00B7\\u0300-\\u036F\\u203F-\\u2040' + EditDataDialog.nameStartChar;
+EditDataDialog.nameChar = Graph.xmlNameChars;
 
 /**
  * Matches a valid XML attribute name. Browsers' setAttribute does not reliably
@@ -4302,11 +4402,18 @@ EditDataDialog.getDisplayIdForCell = function(ui, cell)
 EditDataDialog.placeholderHelpLink = null;
 
 /**
- * Constructs a new link dialog.
+ * Constructs a new link dialog. mixed is an optional object whose link and
+ * linkTarget flags mark values that differ between the cells being edited.
+ * A mixed link shows an empty field and stays unchanged if the result is
+ * empty and the user neither typed into the field nor reset it. fn is then
+ * called with an object as its fourth argument whose link and linkTarget
+ * flags mark the mixed values the user left unchanged, so the caller keeps
+ * each cell's own value.
  */
-var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
+var LinkDialog = function(editorUi, initialValue, btnLabel, fn, mixed)
 {
 	var div = document.createElement('div');
+	div.style.paddingBottom = '10px';
 	mxUtils.write(div, mxResources.get('editLink') + ':');
 	
 	var inner = document.createElement('div');
@@ -4318,9 +4425,13 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 	inner.style.cursor = 'default';
 	inner.style.paddingRight = '20px';
 	
+	var mixedLink = mixed != null && mixed.link == true;
+	var linkEdited = false;
+
 	var linkInput = document.createElement('input');
 	linkInput.setAttribute('value', initialValue);
-	linkInput.setAttribute('placeholder', 'http://www.example.com/');
+	linkInput.setAttribute('placeholder', (mixedLink) ?
+		mxResources.get('multipleValues') : 'http://www.example.com/');
 	linkInput.setAttribute('type', 'text');
 	linkInput.style.marginTop = '6px';
 	linkInput.style.width = '400px';
@@ -4348,7 +4459,21 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 	{
 		linkInput.value = '';
 		linkInput.focus();
+		linkEdited = true;
 	});
+
+	mxEvent.addListener(linkInput, 'input', function()
+	{
+		linkEdited = true;
+	});
+
+	// There is no target option in this dialog, so a mixed target
+	// is always unchanged
+	var getUnchanged = function()
+	{
+		return {link: mixedLink && !linkEdited && linkInput.value == '',
+			linkTarget: mixed != null && mixed.linkTarget == true};
+	};
 	
 	inner.appendChild(linkInput);
 	inner.appendChild(cross);
@@ -4369,7 +4494,7 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 	};
 	
 	var btns = document.createElement('div');
-	btns.style.marginTop = '18px';
+	btns.style.marginTop = '34px';
 	btns.style.textAlign = 'right';
 
 	mxEvent.addListener(linkInput, 'keypress', function(e)
@@ -4377,7 +4502,7 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 		if (e.keyCode == 13)
 		{
 			editorUi.hideDialog();
-			fn(linkInput.value);
+			fn(linkInput.value, null, null, getUnchanged());
 		}
 	});
 
@@ -4395,7 +4520,7 @@ var LinkDialog = function(editorUi, initialValue, btnLabel, fn)
 	var mainBtn = mxUtils.button(btnLabel, function()
 	{
 		editorUi.hideDialog();
-		fn(linkInput.value);
+		fn(linkInput.value, null, null, getUnchanged());
 	});
 	mainBtn.className = 'geBtn gePrimaryBtn';
 	btns.appendChild(mainBtn);
@@ -4461,7 +4586,7 @@ var OutlineWindow = function(editorUi, x, y, w, h)
 
 	outline.init(div);
 	
-	mxEvent.addMouseWheelListener(function(evt, up)
+	mxEvent.addMouseWheelListener(function(evt, up, force, cx, cy, pinch)
 	{
 		var outlineWheel = false;
 		var source = mxEvent.getSource(evt);
@@ -4488,8 +4613,15 @@ var OutlineWindow = function(editorUi, x, y, w, h)
 				factor = 1 + (Math.abs(evt.deltaY) / 20) * (factor - 1);
 				smooth = true;
 			}
+			// Pinch gesture on touch screens zooms by the change of the
+			// distance between the fingers
+			else if (pinch != null)
+			{
+				factor = (pinch > 1) ? pinch : 1 / pinch;
+				smooth = true;
+			}
 
-			graph.lazyZoom(up, null, null, factor, smooth);
+			graph.lazyZoom(up, null, null, factor, smooth, true);
 			mxEvent.consume(evt);
 		}
 	});
@@ -4523,7 +4655,12 @@ var LayersWindow = function(editorUi, x, y, w, h)
 	
 	mxEvent.addListener(div, 'dragover', function(evt)
 	{
-		evt.dataTransfer.dropEffect = 'move';
+		// Drag events created by scripts may have no dataTransfer
+		if (evt.dataTransfer != null)
+		{
+			evt.dataTransfer.dropEffect = 'move';
+		}
+
 		dropIndex = 0;
 		evt.stopPropagation();
 		evt.preventDefault();
@@ -5104,7 +5241,11 @@ var LayersWindow = function(editorUi, x, y, w, h)
 
 			mxEvent.addListener(ldiv, 'dragover', function(evt)
 			{
-				evt.dataTransfer.dropEffect = 'move';
+				if (evt.dataTransfer != null)
+				{
+					evt.dataTransfer.dropEffect = 'move';
+				}
+
 				dropIndex = index;
 				evt.stopPropagation();
 				evt.preventDefault();
@@ -5117,7 +5258,7 @@ var LayersWindow = function(editorUi, x, y, w, h)
 					dragSource = ldiv;
 					
 					// Workaround for no DnD on DIV in FF
-					if (mxClient.IS_FF)
+					if (mxClient.IS_FF && evt.dataTransfer != null)
 					{
 						// LATER: Check what triggers a parse as XML on this in FF after drop
 						evt.dataTransfer.setData('Text', '<layer/>');

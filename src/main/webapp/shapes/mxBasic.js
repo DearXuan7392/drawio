@@ -3344,6 +3344,63 @@ mxCellRenderer.registerShape(mxShapeBasicPolygon.prototype.cst.POLYGON, mxShapeB
 
 mxShapeBasicPolygon.prototype.constraints = null;
 
+// The vertices and the middle of each side (of the curve on a curved side); a
+// polyline has no closing side. Lists that are not arrays of number pairs or
+// are longer than 100 vertices get no points.
+mxShapeBasicPolygon.prototype.getConstraints = function(style, w, h)
+{
+	var constr = [];
+
+	try
+	{
+		var coords = JSON.parse(mxUtils.getValue(style, 'polyCoords', '[]'));
+		var curves = JSON.parse(mxUtils.getValue(style, 'polyCurves', '[]'));
+		var polyline = mxUtils.getValue(style, 'polyline', false);
+
+		var isPoint = function(p)
+		{
+			return Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number' &&
+				isFinite(p[0]) && isFinite(p[1]);
+		};
+
+		if (Array.isArray(coords) && coords.length <= 100 && coords.every(isPoint))
+		{
+			var n = coords.length;
+			var sides = (polyline == false) ? n : n - 1;
+			curves = (Array.isArray(curves)) ? curves : [];
+
+			for (var i = 0; i < n; i++)
+			{
+				constr.push(new mxConnectionConstraint(new mxPoint(coords[i][0], coords[i][1]), false));
+			}
+
+			for (var i = 0; i < sides && n > 1; i++)
+			{
+				var p0 = coords[i];
+				var p1 = coords[(i + 1) % n];
+				var ci = (curves.length > i) ? curves[i] : null;
+				var mx = (p0[0] + p1[0]) / 2;
+				var my = (p0[1] + p1[1]) / 2;
+
+				if (Array.isArray(ci) && ci.length >= 3 && ci[0] === 'Q' &&
+					isPoint([ci[1], ci[2]]))
+				{
+					mx = (p0[0] + p1[0]) / 4 + ci[1] / 2;
+					my = (p0[1] + p1[1]) / 4 + ci[2] / 2;
+				}
+
+				constr.push(new mxConnectionConstraint(new mxPoint(mx, my), false));
+			}
+		}
+	}
+	catch (e)
+	{
+		// ignore
+	}
+
+	return constr;
+};
+
 (function()
 {
     function createPolygonHandles(state)
@@ -3358,8 +3415,14 @@ mxShapeBasicPolygon.prototype.constraints = null;
             var isPolyline = polyline == 1 || polyline === true || polyline === 'true' || polyline === '1';
             var minPoints = isPolyline ? 2 : 3;
 
+            // Ignores coordinates that are not arrays, e.g. {"length":1e9}
+            if (!Array.isArray(coords))
+            {
+                return handles;
+            }
+
             // Ensure curves array matches coords length
-            while (curves.length < coords.length)
+            while (Array.isArray(curves) && curves.length < coords.length)
             {
                 curves.push([]);
             }
@@ -3536,6 +3599,13 @@ mxShapeBasicPatternFillRect.prototype.customProperties = [
 ];
 
 /**
+ * Variable: maxLines
+ *
+ * Maximum number of lines per direction of the fill. Default is 10000.
+ */
+mxShapeBasicPatternFillRect.prototype.maxLines = 10000;
+
+/**
 * Function: paintVertexShape
 * 
 * Paints the vertex shape.
@@ -3563,10 +3633,11 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 	{
 		step = step * 1.41;
 		var i = 0;
+		var n = 0;
 		
 		c.begin();
 		
-		while (i < (h + w))
+		while (i < (h + w) && n < this.maxLines)
 		{
 			var cx = 0;
 			var cy = 0;
@@ -3599,6 +3670,7 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 			}
 			
 			i = i + step;
+			n++;
 		}
 		
 		c.stroke();
@@ -3607,8 +3679,9 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 	{
 		c.begin();
 		var i = 0;
+		var n = 0;
 		
-		while (i <= w)
+		while (i <= w && n < this.maxLines)
 		{
 			var cx = 0;
 			var cy = 0;
@@ -3617,6 +3690,7 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 			c.lineTo(i, h);
 			
 			i = i + step;
+			n++;
 		}
 		
 		c.stroke();
@@ -3630,10 +3704,11 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 		}
 
 		var i = 0;
+		var n = 0;
 		
 		c.begin();
 		
-		while (i < (h + w))
+		while (i < (h + w) && n < this.maxLines)
 		{
 			var cx = 0;
 			var cy = 0;
@@ -3666,6 +3741,7 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 			}
 			
 			i = i + step;
+			n++;
 		}
 		
 		c.stroke();
@@ -3674,8 +3750,9 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 	{
 		c.begin();
 		var i = 0;
+		var n = 0;
 		
-		while (i <= h)
+		while (i <= h && n < this.maxLines)
 		{
 			var cx = 0;
 			var cy = 0;
@@ -3684,6 +3761,7 @@ mxShapeBasicPatternFillRect.prototype.paintVertexShape = function(c, x, y, w, h)
 			c.lineTo(w, i);
 			
 			i = i + step;
+			n++;
 		}
 		
 		c.stroke();

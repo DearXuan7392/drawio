@@ -124,6 +124,82 @@
 	};
 
 	/**
+	 * Returns true if the given cell has an outgoing tree edge in the
+	 * model. Unlike getOutgoingTreeEdges this does not resolve visible
+	 * terminals, which are not yet valid while the terminal states are
+	 * revalidated (eg. for the folding icon after inserting an edge).
+	 */
+	Graph.prototype.hasOutgoingTreeEdge = function(cell)
+	{
+		var count = this.model.getEdgeCount(cell);
+
+		for (var i = 0; i < count; i++)
+		{
+			var edge = this.model.getEdgeAt(cell, i);
+
+			if (this.model.getTerminal(edge, true) == cell &&
+				this.model.getTerminal(edge, false) != cell &&
+				this.isTreeEdge(edge))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	/**
+	 * Hides the folding icon on leaves: expanded tree cells are only
+	 * foldable with outgoing tree edges. Collapsed cells stay foldable
+	 * so they can always be expanded.
+	 */
+	var graphIsTreeCellFoldable = Graph.prototype.isTreeCellFoldable;
+
+	Graph.prototype.isTreeCellFoldable = function(cell, style)
+	{
+		return graphIsTreeCellFoldable.apply(this, arguments) &&
+			(this.isCellCollapsed(cell) ||
+			this.hasOutgoingTreeEdge(cell));
+	};
+
+	/**
+	 * Refreshes the folding icon on the source terminals of added, removed
+	 * or reconnected edges. The base change handling only invalidates the
+	 * edge itself, so the icon would not appear on the first child edge or
+	 * disappear with the last one until an unrelated revalidation.
+	 */
+	var graphProcessChange = Graph.prototype.processChange;
+
+	Graph.prototype.processChange = function(change)
+	{
+		graphProcessChange.apply(this, arguments);
+
+		if (change instanceof mxChildChange && this.model.isEdge(change.child))
+		{
+			this.invalidateTreeFolding(this.model.getTerminal(change.child, true));
+		}
+		else if (change instanceof mxTerminalChange && change.source)
+		{
+			this.invalidateTreeFolding(change.terminal);
+			this.invalidateTreeFolding(change.previous);
+		}
+	};
+
+	/**
+	 * Invalidates the state of the given cell if its folding icon depends
+	 * on outgoing tree edges.
+	 */
+	Graph.prototype.invalidateTreeFolding = function(cell)
+	{
+		if (cell != null && !this.model.isCollapsed(cell) &&
+			mxUtils.getValue(this.getCurrentCellStyle(cell),
+			'treeFolding', '0') == '1')
+		{
+			this.view.invalidate(cell, false, false);
+		}
+	};
+
+	/**
 	 * Overrides functionality in editor.
 	 */
 	var editorUiInit = EditorUi.prototype.init;
@@ -585,6 +661,24 @@
 			return wiped;
 		};
 
+		// Returns the result of collectTreeRemoval for the given cells. A
+		// cascade that would delete the whole graph inside a tree container
+		// is more than the gesture intends - falls back to the minimal set
+		// with no dangling edges for those containers: a vertex takes only
+		// its incident edges with it and a selected edge removes just itself
+		function getTreeRemoval(cells)
+		{
+			var result = collectTreeRemoval(cells, null);
+			var wiped = getWipedTreeContainers(result);
+
+			if (wiped != null)
+			{
+				result = collectTreeRemoval(cells, wiped);
+			}
+
+			return result;
+		};
+
 		var graphRemoveCells = graph.removeCells;
 
 		graph.removeCells = function(cells, includeEdges)
@@ -604,22 +698,47 @@
 				cells = this.getDeletableCells(this.addAllEdges(cells));
 			}
 
-			var result = collectTreeRemoval(cells, null);
-			var wiped = getWipedTreeContainers(result);
-
-			// A cascade that would delete the whole graph inside a tree
-			// container is more than the gesture intends - falls back to
-			// the minimal set with no dangling edges for those containers:
-			// a vertex takes only its incident edges with it and a selected
-			// edge removes just itself
-			if (wiped != null)
-			{
-				result = collectTreeRemoval(cells, wiped);
-			}
-
-			cells = result.cells;
+			cells = getTreeRemoval(cells).cells;
 
 			return graphRemoveCells.apply(this, arguments);
+		};
+
+		var graphGetCutCells = graph.getCutCells;
+
+		// Cutting a vertex in a tree removes the branch below it (see
+		// removeCells) so the branch is copied as well to be restored by
+		// pasting. Edges to vertices that are not cut are removed but not
+		// copied unless they were cut explicitly, as they would be dangling.
+		graph.getCutCells = function(cells)
+		{
+			cells = graphGetCutCells.apply(this, arguments);
+			var result = getTreeRemoval(cells);
+
+			if (result.cascaded.length > 0)
+			{
+				var explicit = new mxDictionary();
+
+				for (var i = 0; i < cells.length; i++)
+				{
+					explicit.put(cells[i], true);
+				}
+
+				cells = [];
+
+				for (var i = 0; i < result.cells.length; i++)
+				{
+					var cell = result.cells[i];
+
+					if (explicit.get(cell) || !model.isEdge(cell) ||
+						(result.deleted.get(model.getTerminal(cell, true)) &&
+						result.deleted.get(model.getTerminal(cell, false))))
+					{
+						cells.push(cell);
+					}
+				}
+			}
+
+			return cells;
 		};
 	
 		ui.hoverIcons.getStateAt = function(state, x, y)
@@ -1266,7 +1385,9 @@
 				
 				targets.sort(function(a, b)
 				{
-					return (horizontal) ? a.x + a.width - b.x - b.width : a.y + a.height - b.y - b.height;
+					// The sums can be infinite for large geometries
+					return (horizontal) ? mxUtils.compareNumbers(a.x + a.width, b.x + b.width) :
+						mxUtils.compareNumbers(a.y + a.height, b.y + b.height);
 				});
 			}
 			
@@ -1338,13 +1459,18 @@
 
 				if (graph.isEnabled() && !graph.isEditing() && cell != null)
 				{
-					var action = (mxEvent.isAltDown(evt) && mxEvent.isShiftDown(evt)) ? 
-						altShiftActions[evt.keyCode] : (mxEvent.isAltDown(evt) ?
-							altActions[evt.keyCode] : null);
+					// Ctrl/Cmd+Alt(+Shift) is left to the key handler (eg. Ctrl+Alt+C)
+					var action = (!mxEvent.isAltDown(evt) || mxEvent.isControlDown(evt) ||
+						mxEvent.isMetaDown(evt)) ? null : ((mxEvent.isShiftDown(evt)) ?
+							altShiftActions[evt.keyCode] : altActions[evt.keyCode]);
 
 					if (action != null)
 					{
-						action.funct(evt);
+						if (action.isEnabled())
+						{
+							action.funct(evt);
+						}
+
 						mxEvent.consume(evt);
 					}
 					else if (isTreeVertex(cell))
