@@ -1,60 +1,109 @@
+
 name: 每周自动同步上游
 
 on:
   schedule:
-    # 每周一的北京时间凌晨 4:00 自动运行一次 (UTC 20:00)
+    # 每周一北京时间凌晨 4:00 运行（UTC 时间为周日 20:00）
     - cron: '0 20 * * 0'
   workflow_dispatch: # 保留手动触发按钮
+
+# 允许工作流读取和推送仓库代码
+permissions:
+  contents: write
+
+# 防止定时任务与手动任务同时修改同一个分支
+concurrency:
+  group: sync-upstream-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   native-git-sync:
     runs-on: ubuntu-latest
+
     steps:
-      # 1. 检出你自己的代码（使用你的 GitHub Token 允许后续推回）
+      # 1. 检出自己的仓库，获取完整 Git 历史
       - name: 检出本地代码
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # 获取完整历史记录
+          fetch-depth: 0
+          persist-credentials: true
 
-      # 2. 配置 Git 机器人身份（用于合并时生成 Commit 记录）
+      # 2. 配置 Git 机器人身份
       - name: 配置 Git 身份
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # 3. 检查是否有更新，并在有更新时才进行合并与推送
+      # 3. 检查上游更新并自动合并
       - name: 检查上游并自动合并
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
         run: |
-          git remote add upstream https://github.com/jgraph/drawio.git
-          git fetch upstream dev
-          
-          CHANGES=$(git log HEAD..upstream/dev --oneline)
-          
-          if [ -z "$CHANGES" ]; then
-            echo "=============================================="
-            echo "🎉 检查完毕：你的仓库已经是最新，官方无新更新！"
-            echo "=============================================="
-            exit 0
-          else
-            echo "=============================================="
-            echo "🚀 发现官方有新提交，正在合并更新..."
-            echo "=============================================="
-            
-            # 1. 保存合并前你自己的 HEAD 提交哈希
-            MY_BEFORE_COMMIT=$(git rev-parse HEAD)
+          set -euo pipefail
 
-            # 2. 正常合并官方代码
-            git merge upstream/dev --allow-unrelated-histories -m "chore: 自动化每周同步官方最新代码"
-            
-            # 重点：3. 将 .github 文件夹强制重置为你合并前的状态（丢弃上游对 .github 的更改）
-            git checkout $MY_BEFORE_COMMIT -- .github
-            
-            # 4. 如果发生了重置，产生一个新的修正 Commit
-            git commit --amend -m "chore: 自动化每周同步官方最新代码 (排除上游 .github 修改)"
-            
-            # 5. 推送回你自己的 GitHub 仓库
-            git push origin HEAD
-            
-            echo "✅ 更新已成功同步到你的仓库（已自动屏蔽上游 .github 文件的更改）！"
+          # 添加官方 draw.io 仓库
+          git remote add upstream https://github.com/jgraph/drawio.git
+
+          # 获取官方 dev 分支
+          git fetch upstream dev
+
+          # 确认当前分支与上游是否存在共同祖先
+          if git merge-base HEAD upstream/dev >/dev/null 2>&1; then
+            # 有共同祖先时，只同步尚未合并的上游提交
+            CHANGES=$(git log HEAD..upstream/dev --oneline)
+
+            if [ -z "$CHANGES" ]; then
+              echo "=============================================="
+              echo "检查完毕：没有新的上游提交，无需同步。"
+              echo "=============================================="
+              exit 0
+            fi
+          else
+            echo "当前仓库与上游没有共同祖先，将尝试合并两个历史。"
           fi
+
+          echo "=============================================="
+          echo "发现上游更新，开始同步 draw.io..."
+          echo "=============================================="
+
+          # 保存合并前自己的提交
+          MY_BEFORE_COMMIT=$(git rev-parse HEAD)
+
+          # 记录自己的 .github 目录
+          # 合并后会恢复此提交中的完整目录内容
+          if git cat-file -e "${MY_BEFORE_COMMIT}:.github" 2>/dev/null; then
+            KEEP_GITHUB=true
+          else
+            KEEP_GITHUB=false
+          fi
+
+          # 合并官方代码
+          # -X ours：遇到内容冲突时优先采用当前仓库版本
+          # --allow-unrelated-histories：允许合并无共同祖先的历史
+          git merge upstream/dev \
+            --allow-unrelated-histories \
+            -X ours \
+            --no-edit \
+            -m "chore: 自动同步官方 draw.io 更新"
+
+          # 无论官方是否修改 .github，均恢复自己的版本
+          if [ "$KEEP_GITHUB" = true ]; then
+            git checkout "$MY_BEFORE_COMMIT" -- .github
+          else
+            # 如果自己原本没有 .github，则移除上游引入的目录
+            git rm -r --ignore-unmatch .github
+          fi
+
+          # 只有暂存区存在变更时，才修正合并提交
+          if ! git diff --cached --quiet; then
+            git commit --amend --no-edit
+          fi
+
+          # 推送到触发工作流的分支
+          git push origin "HEAD:${TARGET_BRANCH}"
+
+          echo "=============================================="
+          echo "同步成功！"
+          echo "=============================================="
